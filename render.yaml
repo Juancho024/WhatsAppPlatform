@@ -1,0 +1,15 @@
+services:
+  type: web
+  name: whatsapp-backend
+  env: java
+  region: ohio # o la región que prefieras
+  plan: free
+  buildCommand: "./mvnw clean package -DskipTests"
+  startCommand: "java -jar target/*.jar"
+  envVars:
+    - key: SPRING_DATASOURCE_URL
+      sync: false
+    - key: SPRING_DATASOURCE_USERNAME
+      value: postgres
+    - key: SPRING_DATASOURCE_PASSWORD
+      sync: false

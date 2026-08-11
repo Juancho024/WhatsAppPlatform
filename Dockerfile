@@ -1,7 +1,7 @@
 # Etapa de compilación
 FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /app
-COPY . .
+COPY src .
 RUN ./mvnw clean package -DskipTests
 
 # Etapa de ejecución final

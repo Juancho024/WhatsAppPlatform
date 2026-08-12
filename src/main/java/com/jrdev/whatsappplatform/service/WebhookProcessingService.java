@@ -1,112 +1,66 @@
 package com.jrdev.whatsappplatform.service;
 
-import org.springframework.scheduling.annotation.Async;
 import tools.jackson.databind.JsonNode;
 import com.jrdev.whatsappplatform.model.*;
-import com.jrdev.whatsappplatform.repository.*;
+import com.jrdev.whatsappplatform.repository.WhatsappInstanciaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 @Service
 @RequiredArgsConstructor
 public class WebhookProcessingService {
 
+    private final JdbcTemplate jdbcTemplate;
     private final WhatsappInstanciaRepository instanciaRepo;
-    private final ContactoRepository contactoRepo;
-    private final ChatRepository chatRepo;
-    private final MensajeRepository mensajeRepo;
     private final BotRouterService botRouterService;
 
-    @Async
+    @Async // 🔥 ESTO LIBERA A EVOLUTION API DE INMEDIATO
     @Transactional
     public void procesarMensajeUpsert(String instanceName, JsonNode dataNode) {
 
-        // 1. Extraer datos clave
+        // 1. Extraer los datos del JSON
         JsonNode keyNode = dataNode.path("key");
         String remoteJid = keyNode.path("remoteJid").asText();
         boolean fromMe = keyNode.path("fromMe").asBoolean();
         String messageId = keyNode.path("id").asText();
-
-        // Manejo seguro del nombre del contacto
         String pushName = dataNode.has("pushName") ? dataNode.get("pushName").asText() : remoteJid;
 
-        // Extraer el texto y el tipo real (conversation, imageMessage, etc.)
         JsonNode messageNode = dataNode.path("message");
         String tipoMensaje = dataNode.path("messageType").asText("conversation");
         String contenido = messageNode.has("conversation") ?
                 messageNode.path("conversation").asText() :
                 messageNode.path("extendedTextMessage").path("text").asText("[Mensaje multimedia]");
 
-        // 2. Buscar Instancia
-        WhatsappInstancia instancia = instanciaRepo.buscarPorInstanceName(instanceName)
-                .orElseThrow(() -> new RuntimeException("Instancia no encontrada: " + instanceName));
+        // 2. Ejecutar la Función SQL (Los 4 pasos de BD en 1 solo viaje)
+        String sql = "SELECT procesar_webhook_whatsapp(?, ?, ?, ?, ?, ?, ?)";
 
-        // 3. Buscar o Crear Contacto
-        Contacto contacto = contactoRepo.buscarPorRemoteJid(remoteJid)
-                .orElseGet(() -> {
-                    Contacto nuevoContacto = new Contacto();
-                    nuevoContacto.setRemotejid(remoteJid);
-                    nuevoContacto.setPushName(pushName);
-                    nuevoContacto.setNombre(pushName);
-                    nuevoContacto.setIdEmpresa(instancia.getIdEmpresa());
-                    nuevoContacto.setBloqueado(false); // IMPORTANTE para evitar errores SQL
-                    nuevoContacto.setTipo("PERSONA");
-                    Long nuevoId = contactoRepo.crear(nuevoContacto);
-                    nuevoContacto.setIdContacto(nuevoId);
-                    return nuevoContacto;
-                });
+        // Usamos query con un RowCallbackHandler vacío para consumir el VOID de Postgres de forma segura
+        jdbcTemplate.query(
+                sql,
+                rs -> {},
+                instanceName, remoteJid, pushName, messageId, contenido, tipoMensaje, fromMe
+        );
 
-        // 4. Buscar o Crear Chat
-        Chat chat = chatRepo.buscarPorInstanciaYContacto(instancia.getIdWhatsappInstancia(), contacto.getIdContacto())
-                .orElseGet(() -> {
-                    Chat nuevoChat = new Chat();
-                    nuevoChat.setIdWhatsAppInstancia(instancia.getIdWhatsappInstancia());
-                    nuevoChat.setIdContacto(contacto.getIdContacto());
-                    nuevoChat.setRemotejid(remoteJid);
-                    nuevoChat.setTitulo(pushName);
-                    nuevoChat.setEstado("ABIERTO");
-                    nuevoChat.setUnread_count(0);
-                    nuevoChat.setUltima_actividad(OffsetDateTime.now(ZoneOffset.UTC));
+        // 3. Evaluar si hay que pasarle el mensaje al Bot
+        if (!fromMe && contenido != null && !contenido.equals("[Mensaje multimedia]")) {
 
-                    Long nuevoId = chatRepo.crear(nuevoChat);
-                    nuevoChat.setIdChat(nuevoId);
-                    return nuevoChat;
-                });
+            // Buscamos la instancia para saber de qué empresa es
+            WhatsappInstancia instancia = instanciaRepo.buscarPorInstanceName(instanceName)
+                    .orElseThrow(() -> new RuntimeException("Instancia no encontrada: " + instanceName));
 
-        // 5. Crear y Guardar el Mensaje
-        // 5. Crear y Guardar el Mensaje
-        Mensaje mensaje = new Mensaje();
-        mensaje.setIdChat(chat.getIdChat());
-        mensaje.setEvolutionMessageId(messageId);
-        mensaje.setContenido(contenido);
-        mensaje.setTipo(tipoMensaje); // Ahora es dinámico
-        mensaje.setSenderJid(remoteJid);
-        mensaje.setEnviadoPorNosotros(fromMe);
+            // Armamos los objetos en memoria (RAM) para el router, sin consultar la BD
+            Contacto contactoMemoria = new Contacto();
+            contactoMemoria.setRemotejid(remoteJid);
+            contactoMemoria.setNombre(pushName);
 
-        // CORRECCIÓN AQUÍ: Usar los valores exactos permitidos por el CHECK de PostgreSQL
-        mensaje.setDireccion(fromMe ? "OUTGOING" : "INCOMING");
+            Mensaje mensajeMemoria = new Mensaje();
+            mensajeMemoria.setContenido(contenido);
 
-        mensaje.setEstado(dataNode.path("status").asText("RECEIVED"));
-        mensaje.setFechaMensaje(OffsetDateTime.now(ZoneOffset.UTC));
-
-        mensajeRepo.crear(mensaje);
-        // 6. Actualizar el Chat
-        chatRepo.actualizarUltimaActividad(chat.getIdChat());
-        if (!fromMe) {
-            chatRepo.incrementarUnreadCount(chat.getIdChat());
-            // Validamos que sea un texto real antes de enviarlo al bot para que navegue el menú
-            // (Ignoramos imágenes/audios por ahora para no confundir al bot)
-            if (mensaje.getContenido() != null && !mensaje.getContenido().equals("[Mensaje multimedia]")) {
-
-                // ¡AQUÍ ENCIENDES EL MOTOR!
-                // Le pasas toda la información al Router para que haga la magia.
-                botRouterService.procesarRespuesta(instancia, contacto, mensaje);
-
-            }
+            // ¡Arrancamos el motor!
+            botRouterService.procesarRespuesta(instancia, contactoMemoria, mensajeMemoria);
         }
     }
 }

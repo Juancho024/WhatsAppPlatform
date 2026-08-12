@@ -80,7 +80,8 @@ public class VentasBotStrategy implements BotStrategy {
     // 5. TU LÓGICA DE LA API EXTRAÍDA A UN MÉTODO LIMPIO
     private String consultarInventario(Integracion integracion) {
         try {
-            String urlConsulta = integracion.getBaseUrl() + "/api/v1/whatsapp/inventario";
+//            String urlConsulta = integracion.getBaseUrl() + "/api/v1/whatsapp/inventario";
+            String urlConsulta = "https://mocki.io/v1/3cb45acb-c1c4-4fbb-a409-96b263e35835";
 
             InventarioUniversalResponseDto respuestaExterna = restClient.get()
                     .uri(urlConsulta)

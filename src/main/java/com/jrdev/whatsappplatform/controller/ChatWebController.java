@@ -29,8 +29,6 @@ public class ChatWebController {
     private final WhatsappInstanciaRepository instanciaRepo;
     private final EvolutionClient evolutionClient;
 
-    // ... (Tus otros métodos: listarChatsPorInstancia y listarMensajesDeChat) ...
-
     @CrossOrigin(origins = "http://localhost:5173")
     @PostMapping("/enviar")
     public ResponseEntity<String> enviarMensajeWeb(@RequestBody EnviarMensajeRequest request) {

@@ -76,6 +76,7 @@ public class EvolutionClient {
 
         } catch (Exception e) {
             System.err.println("❌ Error enviando mensaje a " + numero + ": " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -106,7 +107,7 @@ public class EvolutionClient {
             validarRespuesta(response);
             return response.body();
         } catch (Exception e) {
-            throw new RuntimeException("Error comunicando con Evolution API en POST", e);
+            throw new RuntimeException("Error en POST. Detalles: " + e.getMessage(), e);
         }
     }
 

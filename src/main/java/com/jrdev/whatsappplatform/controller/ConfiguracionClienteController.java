@@ -60,8 +60,8 @@ public class ConfiguracionClienteController {
             Integracion integracion = new Integracion();
             integracion.setIdEmpresa(idEmpresa);
             integracion.setNombre("Bot de WhatsApp - " + request.getNombreEmpresa());
-            integracion.setTipo("WHATSAPP_BOT");
-            integracion.setBaseUrl(request.getApiUrlEvolution());
+            integracion.setTipo("VENTAS");
+            integracion.setBaseUrl(""); //base url de la base donde se va a sacar info
             integracion.setEstado("ACTIVA");
             integracion.setConfiguration(Map.of("instanceName", instanceNameLimpio));
             integracion.setCreatedAt(OffsetDateTime.now());

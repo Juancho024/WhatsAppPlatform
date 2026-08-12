@@ -7,6 +7,7 @@ import com.jrdev.whatsappplatform.service.SessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.JsonNode;
 
 @Service
 @RequiredArgsConstructor
@@ -50,11 +51,10 @@ public class VentasBotStrategy implements BotStrategy {
                     sessionService.clearSession(instanceName, phoneNumber); // Limpiamos sesión porque ya terminó
 
                 } else if (texto.equals("2")) {
-                    respuesta = "Consultando nuestro inventario en tiempo real... ⏳";
-                    evolutionClient.enviarMensaje(instanceName, phoneNumber, respuesta); // Mensaje de espera
+                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Consultando nuestro inventario en tiempo real... ⏳");
 
-                    respuesta = consultarInventario(integracion); // Llamamos al método externo
-                    sessionService.clearSession(instanceName, phoneNumber); // Limpiamos sesión
+                    respuesta = consultarInventario(integracion); //consultar db
+                    sessionService.clearSession(instanceName, phoneNumber);
 
                 } else if (texto.equals("3")) {
                     respuesta = "¡Gracias por contactarnos! Escríbenos cuando nos necesites.";
@@ -80,11 +80,18 @@ public class VentasBotStrategy implements BotStrategy {
     // 5. TU LÓGICA DE LA API EXTRAÍDA A UN MÉTODO LIMPIO
     private String consultarInventario(Integracion integracion) {
         try {
-//            String urlConsulta = integracion.getBaseUrl() + "/api/v1/whatsapp/inventario";
-            String urlConsulta = "https://mocki.io/v1/3cb45acb-c1c4-4fbb-a409-96b263e35835";
+            // 1. Usamos la URL exacta que pusimos en la base de datos
+            String urlConsulta = integracion.getBaseUrl();
 
+            // 2. Extraemos el token de la configuración de Supabase
+            JsonNode configuracion = (JsonNode) integracion.getConfiguration();
+            String token = configuracion.has("api_token") ? configuracion.get("api_token").asText() : "";
+
+            // 3. Petición HTTP lista para consumir Supabase (o cualquier otra API)
             InventarioUniversalResponseDto respuestaExterna = restClient.get()
                     .uri(urlConsulta)
+                    .header("Authorization", "Bearer " + token)
+                    .header("apikey", token) // 🔥 Supabase necesita este header extra
                     .retrieve()
                     .body(InventarioUniversalResponseDto.class);
 
@@ -101,11 +108,11 @@ public class VentasBotStrategy implements BotStrategy {
                     return sb.toString();
                 }
             } else {
-                return "El sistema de inventario reportó: " + (respuestaExterna != null ? respuestaExterna.getMensaje() : "Error desconocido.");
+                return "El sistema reportó: " + (respuestaExterna != null ? respuestaExterna.getMensaje() : "Error desconocido.");
             }
         } catch (Exception e) {
-            System.err.println("Error consultando la API de ventas: " + e.getMessage());
-            return "En este momento nuestro sistema de inventario está en mantenimiento. Intenta en unos minutos.";
+            System.err.println("Error consultando la API de la empresa " + integracion.getIdEmpresa() + ": " + e.getMessage());
+            return "En este momento el sistema de inventario está en mantenimiento. Intenta en unos minutos.";
         }
     }
 }

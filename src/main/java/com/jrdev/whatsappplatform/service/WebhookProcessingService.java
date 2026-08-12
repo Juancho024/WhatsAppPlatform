@@ -1,5 +1,6 @@
 package com.jrdev.whatsappplatform.service;
 
+import org.springframework.scheduling.annotation.Async;
 import tools.jackson.databind.JsonNode;
 import com.jrdev.whatsappplatform.model.*;
 import com.jrdev.whatsappplatform.repository.*;
@@ -20,6 +21,7 @@ public class WebhookProcessingService {
     private final MensajeRepository mensajeRepo;
     private final BotRouterService botRouterService;
 
+    @Async
     @Transactional
     public void procesarMensajeUpsert(String instanceName, JsonNode dataNode) {
 

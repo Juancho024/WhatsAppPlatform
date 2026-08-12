@@ -52,7 +52,7 @@ public class WebhookProcessingService {
                     nuevoContacto.setNombre(pushName);
                     nuevoContacto.setIdEmpresa(instancia.getIdEmpresa());
                     nuevoContacto.setBloqueado(false); // IMPORTANTE para evitar errores SQL
-
+                    nuevoContacto.setTipo("PERSONA");
                     Long nuevoId = contactoRepo.crear(nuevoContacto);
                     nuevoContacto.setIdContacto(nuevoId);
                     return nuevoContacto;

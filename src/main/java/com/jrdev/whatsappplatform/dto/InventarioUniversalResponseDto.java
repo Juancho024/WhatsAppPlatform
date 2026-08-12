@@ -16,7 +16,7 @@ public class InventarioUniversalResponseDto {
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ProductoItem {
-        private String idReferencia;
+        private String id;
         private String nombre;
         private int cantidad;
         private boolean disponible;

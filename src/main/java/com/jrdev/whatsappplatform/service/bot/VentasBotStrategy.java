@@ -170,7 +170,6 @@ public class VentasBotStrategy implements BotStrategy {
         }
     }
 
-    // --- NUEVO MÉTODO AUXILIAR PARA MOSTRAR RESUMEN ANTES DE FACTURAR ---
     private String generarResumenYPedirConfirmacion(Integracion integracion, String idProductoStr, int cantidad, String metodoPago, String instanceName, String phoneNumber) {
         try {
             String rawUrl = integracion.getBaseUrl();
@@ -183,7 +182,8 @@ public class VentasBotStrategy implements BotStrategy {
             String token = (configuracion != null && configuracion.containsKey("api_token"))
                     ? configuracion.get("api_token").toString() : "";
 
-            String productoUrl = baseUrl + "/rest/v1/productos?idProducto=eq." + idProductoStr + "&select=idProducto,nombre,precioVenta";
+            // Ojo aquí: en PostgreSQL/PostgREST los nombres de columnas sin comillas suelen guardarse en minúsculas (idproducto)
+            String productoUrl = baseUrl + "/rest/v1/productos?idproducto=eq." + idProductoStr + "&select=idproducto,nombre,precioVenta";
 
             List<Map<String, Object>> productosEncontrados = restClient.get()
                     .uri(productoUrl)
@@ -205,7 +205,6 @@ public class VentasBotStrategy implements BotStrategy {
             double itbis = subtotal * 0.18;
             double total = subtotal + itbis;
 
-            // Guardamos el estado de confirmación pasando los datos temporalmente en la llave de Redis
             sessionService.saveUserState(instanceName, phoneNumber, "VENTA_ESPERANDO_CONFIRMACION:" + idProductoStr + ":" + cantidad + ":" + metodoPago);
 
             return "📋 *Resumen de tu Compra*\n\n" +
@@ -220,8 +219,12 @@ public class VentasBotStrategy implements BotStrategy {
                     "👉 Responde *SÍ* para confirmar o *NO* para cancelar.";
 
         } catch (Exception e) {
+            // 🔥 AQUÍ IMPRIMIMOS EL ERROR REAL EN LA CONSOLA PARA VERLO
+            System.err.println("❌ ERROR REAL EN RESUMEN DE VENTA: " + e.getMessage());
+            e.printStackTrace();
+
             sessionService.clearSession(instanceName, phoneNumber);
-            return "⚠️ Ocurrió un error al consultar el producto para el resumen. Intenta de nuevo.";
+            return "⚠️ Error técnico: " + e.getMessage(); // Te lo mandará temporalmente al chat para que lo veas de una vez
         }
     }
 

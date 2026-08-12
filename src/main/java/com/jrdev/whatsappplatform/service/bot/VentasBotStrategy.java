@@ -107,6 +107,7 @@ public class VentasBotStrategy implements BotStrategy {
                     for (InventarioUniversalResponseDto.ProductoItem item : respuestaExterna.getDatos()) {
                         sb.append("📦 *").append(item.getNombre()).append("*\n");
                         sb.append("💵 Precio: $").append(item.getPrecio()).append("\n");
+                        sb.append("📦 Stock: ").append(item.getStock()).append(" unidades*\n\n");;
                         sb.append("📊 Estado: ").append(item.isDisponible() ? "En Stock" : "Agotado").append("\n\n");
                     }
                     return sb.toString();

@@ -18,6 +18,7 @@ public class InventarioUniversalResponseDto {
     public static class ProductoItem {
         private String idReferencia;
         private String nombre;
+        private int stock;
         private boolean disponible;
         private double precio;
     }

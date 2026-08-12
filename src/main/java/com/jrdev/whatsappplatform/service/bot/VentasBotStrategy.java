@@ -70,7 +70,7 @@ public class VentasBotStrategy implements BotStrategy {
                 }
                 break;
 
-            // --- SUB-FLUJO DE VENTAS GUIADO POR ID ---
+            // --- SUB-FLUJO DE VENTAS GUIADO ---
             case "VENTA_ESPERANDO_ID_PRODUCTO":
                 sessionService.saveUserState(instanceName, phoneNumber, "VENTA_ESPERANDO_CANTIDAD:" + texto);
                 respuesta = "🔢 Has seleccionado el producto ID: *" + texto + "*. ¿Qué cantidad deseas llevar?";
@@ -92,21 +92,34 @@ public class VentasBotStrategy implements BotStrategy {
                 break;
 
             case String s when s.startsWith("VENTA_ESPERANDO_PAGO:"):
-                String[] partes = s.split(":");
-                String prodId = partes[1];
-                int cant = Integer.parseInt(partes[2]);
+                String[] partesPago = s.split(":");
+                String prodIdPago = partesPago[1];
+                int cantPago = Integer.parseInt(partesPago[2]);
 
-                String metodoPago = "EFECTIVO";
-                if (texto.equals("2") || texto.equalsIgnoreCase("tarjeta")) {
-                    metodoPago = "TARJETA";
-                } else if (texto.equals("3") || texto.equalsIgnoreCase("transferencia")) {
-                    metodoPago = "TRANSFERENCIA";
+                String metodoPago = switch (texto) {
+                    case "2", "tarjeta", "TARJETA" -> "TARJETA";
+                    case "3", "transferencia", "TRANSFERENCIA" -> "TRANSFERENCIA";
+                    default -> "EFECTIVO";
+                };
+
+                // Consultamos los datos previos para armar el RESUMEN DE CONFIRMACIÓN antes de facturar
+                respuesta = generarResumenYPedirConfirmacion(integracion, prodIdPago, cantPago, metodoPago, instanceName, phoneNumber);
+                break;
+
+            // --- NUEVO ESTADO: ESPERANDO CONFIRMACIÓN FINAL (SÍ / NO) ---
+            case String s when s.startsWith("VENTA_ESPERANDO_CONFIRMACION:"):
+                String[] partesConf = s.split(":");
+                String prodIdConf = partesConf[1];
+                int cantConf = Integer.parseInt(partesConf[2]);
+                String metodoConf = partesConf[3];
+
+                String respuestaLower = texto.toLowerCase();
+                if (respuestaLower.equals("sí") || respuestaLower.equals("si") || respuestaLower.equals("1") || respuestaLower.equals("confirmar")) {
+                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Generando factura y descontando inventario... ⏳");
+                    respuesta = procesarVentaConIdReal(integracion, prodIdConf, cantConf, metodoConf);
+                } else {
+                    respuesta = "❌ Operación cancelada. La compra no se ha realizado. Escribe cualquier cosa si deseas volver a empezar.";
                 }
-
-                evolutionClient.enviarMensaje(instanceName, phoneNumber, "Validando producto y procesando factura... ⏳");
-
-                // Ejecutamos la venta buscando los datos reales en Supabase por ID
-                respuesta = procesarVentaConIdReal(integracion, prodId, cant, metodoPago);
                 sessionService.clearSession(instanceName, phoneNumber);
                 break;
 
@@ -121,7 +134,7 @@ public class VentasBotStrategy implements BotStrategy {
         }
     }
 
-    // Método para consultar inventario mostrando los IDs claramente
+    // Método para consultar inventario
     private String consultarInventario(Integracion integracion) {
         try {
             String urlConsulta = integracion.getBaseUrl();
@@ -157,15 +170,19 @@ public class VentasBotStrategy implements BotStrategy {
         }
     }
 
-    // --- PROCESAR VENTA BUSCANDO EL PRODUCTO REAL POR ID Y MOSTRANDO CÓDIGOS AL FINAL ---
-    private String procesarVentaConIdReal(Integracion integracion, String idProductoStr, int cantidad, String metodoPago) {
+    // --- NUEVO MÉTODO AUXILIAR PARA MOSTRAR RESUMEN ANTES DE FACTURAR ---
+    private String generarResumenYPedirConfirmacion(Integracion integracion, String idProductoStr, int cantidad, String metodoPago, String instanceName, String phoneNumber) {
         try {
-            String baseUrl = integracion.getBaseUrl().replace("/rpc/api_whatsapp_inventario", "");
+            String rawUrl = integracion.getBaseUrl();
+            if (rawUrl.contains("/rest/v1")) {
+                rawUrl = rawUrl.substring(0, rawUrl.indexOf("/rest/v1"));
+            }
+            String baseUrl = rawUrl;
+
             Map<String, Object> configuracion = (Map<String, Object>) integracion.getConfiguration();
             String token = (configuracion != null && configuracion.containsKey("api_token"))
                     ? configuracion.get("api_token").toString() : "";
 
-            // 1. Consultamos el producto en Supabase usando su ID exacto para obtener su precio y nombre real
             String productoUrl = baseUrl + "/rest/v1/productos?idProducto=eq." + idProductoStr + "&select=idProducto,nombre,precioVenta";
 
             List<Map<String, Object>> productosEncontrados = restClient.get()
@@ -176,7 +193,62 @@ public class VentasBotStrategy implements BotStrategy {
                     .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
 
             if (productosEncontrados == null || productosEncontrados.isEmpty()) {
-                return "❌ No encontré ningún producto registrado con el Código/ID: *" + idProductoStr + "*. Verifica el catálogo e intenta de nuevo.";
+                sessionService.clearSession(instanceName, phoneNumber);
+                return "❌ No encontré ningún producto registrado con el Código/ID: *" + idProductoStr + "*. Operación cancelada.";
+            }
+
+            Map<String, Object> prodData = productosEncontrados.get(0);
+            String nombreProducto = prodData.get("nombre").toString();
+            double precioUnitario = Double.parseDouble(prodData.get("precioVenta").toString());
+
+            double subtotal = precioUnitario * cantidad;
+            double itbis = subtotal * 0.18;
+            double total = subtotal + itbis;
+
+            // Guardamos el estado de confirmación pasando los datos temporalmente en la llave de Redis
+            sessionService.saveUserState(instanceName, phoneNumber, "VENTA_ESPERANDO_CONFIRMACION:" + idProductoStr + ":" + cantidad + ":" + metodoPago);
+
+            return "📋 *Resumen de tu Compra*\n\n" +
+                    "📦 *Producto:* " + nombreProducto + " (ID: " + idProductoStr + ")\n" +
+                    "🔢 *Cantidad:* " + cantidad + " unidades\n" +
+                    "💵 *Precio Unitario:* $" + precioUnitario + "\n" +
+                    "📊 *Subtotal:* $" + String.format("%.2f", subtotal) + "\n" +
+                    "🧾 *ITBIS (18%):* $" + String.format("%.2f", itbis) + "\n" +
+                    "💰 *Total a Pagar:* *" + String.format("%.2f", total) + "*\n" +
+                    "💳 *Método de Pago:* " + metodoPago + "\n\n" +
+                    "¿Deseas confirmar y procesar esta venta?\n" +
+                    "👉 Responde *SÍ* para confirmar o *NO* para cancelar.";
+
+        } catch (Exception e) {
+            sessionService.clearSession(instanceName, phoneNumber);
+            return "⚠️ Ocurrió un error al consultar el producto para el resumen. Intenta de nuevo.";
+        }
+    }
+
+    // --- PROCESAR VENTA REAL EN SUPABASE ---
+    private String procesarVentaConIdReal(Integracion integracion, String idProductoStr, int cantidad, String metodoPago) {
+        try {
+            String rawUrl = integracion.getBaseUrl();
+            if (rawUrl.contains("/rest/v1")) {
+                rawUrl = rawUrl.substring(0, rawUrl.indexOf("/rest/v1"));
+            }
+            String baseUrl = rawUrl;
+
+            Map<String, Object> configuracion = (Map<String, Object>) integracion.getConfiguration();
+            String token = (configuracion != null && configuracion.containsKey("api_token"))
+                    ? configuracion.get("api_token").toString() : "";
+
+            String productoUrl = baseUrl + "/rest/v1/productos?idProducto=eq." + idProductoStr + "&select=idProducto,nombre,precioVenta";
+
+            List<Map<String, Object>> productosEncontrados = restClient.get()
+                    .uri(productoUrl)
+                    .header("Authorization", "Bearer " + token)
+                    .header("apikey", token)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+
+            if (productosEncontrados == null || productosEncontrados.isEmpty()) {
+                return "❌ Producto no encontrado al momento de facturar.";
             }
 
             Map<String, Object> prodData = productosEncontrados.get(0);
@@ -185,10 +257,9 @@ public class VentasBotStrategy implements BotStrategy {
             long idProductoReal = Long.parseLong(prodData.get("idProducto").toString());
 
             double subtotal = precioUnitario * cantidad;
-            double itbis = subtotal * 0.18; // 18% ITBIS o impuesto estándar
+            double itbis = subtotal * 0.18;
             double total = subtotal + itbis;
 
-            // 2. Generamos la factura llamando a la función RPC de Supabase
             Map<String, Object> facturaParams = new HashMap<>();
             facturaParams.put("p_ncf", "B0100000001");
             facturaParams.put("p_tipoComprobante", "CREDITO_FISCAL");
@@ -210,7 +281,6 @@ public class VentasBotStrategy implements BotStrategy {
                     .body(Long.class);
 
             if (idVenta != null && idVenta > 0) {
-                // 3. Registramos el detalle de la venta (esto dispara tu trigger de inventario automáticamente)
                 Map<String, Object> detalleParams = new HashMap<>();
                 detalleParams.put("p_descuento", 0.00);
                 detalleParams.put("p_cantidad", cantidad);
@@ -232,7 +302,6 @@ public class VentasBotStrategy implements BotStrategy {
                         .retrieve()
                         .toBodilessEntity();
 
-                // 4. Retornamos el mensaje detallado mostrando todos los códigos e IDs al usuario
                 return "🎉 *¡Venta Exitosa Registrada!* 🛒\n\n" +
                         "🧾 *Detalles de la Factura*\n" +
                         "🆔 *Código de Venta / Factura:* #" + idVenta + "\n" +
@@ -240,7 +309,7 @@ public class VentasBotStrategy implements BotStrategy {
                         "📦 *Producto:* " + nombreProducto + "\n" +
                         "🔢 *Cantidad:* " + cantidad + " unidades\n" +
                         "💵 *Precio Unitario:* $" + precioUnitario + "\n" +
-                        "💰 *Total Pagado:* $" + String.format("%.2f", total) + "\n" +
+                        "💰 *Total a Pagar:* $" + String.format("%.2f", total) + "\n" +
                         "💳 *Método de Pago:* " + metodoPago + "\n\n" +
                         "¡El stock y los registros se actualizaron automáticamente en MusicStock!";
             } else {
@@ -249,7 +318,7 @@ public class VentasBotStrategy implements BotStrategy {
 
         } catch (Exception e) {
             System.err.println("Error en venta por ID: " + e.getMessage());
-            return "⚠️ Ocurrió un error al procesar la venta. Asegúrate de digitar un ID de producto válido.";
+            return "⚠️ Ocurrió un error al procesar la venta en la base de datos.";
         }
     }
 }

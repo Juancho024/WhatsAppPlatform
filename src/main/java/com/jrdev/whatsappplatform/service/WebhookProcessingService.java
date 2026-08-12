@@ -96,7 +96,15 @@ public class WebhookProcessingService {
         chatRepo.actualizarUltimaActividad(chat.getIdChat());
         if (!fromMe) {
             chatRepo.incrementarUnreadCount(chat.getIdChat());
-//            botRouterService.procesarRespuesta(instancia, contacto, mensaje);
+            // Validamos que sea un texto real antes de enviarlo al bot para que navegue el menú
+            // (Ignoramos imágenes/audios por ahora para no confundir al bot)
+            if (mensaje.getContenido() != null && !mensaje.getContenido().equals("[Mensaje multimedia]")) {
+
+                // ¡AQUÍ ENCIENDES EL MOTOR!
+                // Le pasas toda la información al Router para que haga la magia.
+                botRouterService.procesarRespuesta(instancia, contacto, mensaje);
+
+            }
         }
     }
 }

@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 public class VentasBotStrategy implements BotStrategy {
@@ -83,9 +85,11 @@ public class VentasBotStrategy implements BotStrategy {
             // 1. Usamos la URL exacta que pusimos en la base de datos
             String urlConsulta = integracion.getBaseUrl();
 
-            // 2. Extraemos el token de la configuración de Supabase
-            JsonNode configuracion = (JsonNode) integracion.getConfiguration();
-            String token = configuracion.has("api_token") ? configuracion.get("api_token").asText() : "";
+            // 2. Extraemos el token usando un Map nativo para evitar el error de LinkedHashMap
+            Map<String, Object> configuracion = (Map<String, Object>) integracion.getConfiguration();
+            String token = (configuracion != null && configuracion.containsKey("api_token"))
+                    ? configuracion.get("api_token").toString()
+                    : "";
 
             // 3. Petición HTTP lista para consumir Supabase (o cualquier otra API)
             InventarioUniversalResponseDto respuestaExterna = restClient.get()

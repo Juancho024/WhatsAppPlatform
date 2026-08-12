@@ -106,7 +106,7 @@ public class VentasBotStrategy implements BotStrategy {
                 respuesta = generarResumenYPedirConfirmacion(integracion, prodIdPago, cantPago, metodoPago, instanceName, phoneNumber);
                 break;
 
-            // --- NUEVO ESTADO: ESPERANDO CONFIRMACIÓN FINAL (SÍ / NO) ---
+            // --- ESTADO: ESPERANDO CONFIRMACIÓN FINAL (SÍ / NO) ---
             case String s when s.startsWith("VENTA_ESPERANDO_CONFIRMACION:"):
                 String[] partesConf = s.split(":");
                 String prodIdConf = partesConf[1];
@@ -170,6 +170,7 @@ public class VentasBotStrategy implements BotStrategy {
         }
     }
 
+    // --- MÉTODO AUXILIAR PARA RESUMEN (TODO EN MINÚSCULAS) ---
     private String generarResumenYPedirConfirmacion(Integracion integracion, String idProductoStr, int cantidad, String metodoPago, String instanceName, String phoneNumber) {
         try {
             String rawUrl = integracion.getBaseUrl();
@@ -182,8 +183,8 @@ public class VentasBotStrategy implements BotStrategy {
             String token = (configuracion != null && configuracion.containsKey("api_token"))
                     ? configuracion.get("api_token").toString() : "";
 
-            // Ojo aquí: en PostgreSQL/PostgREST los nombres de columnas sin comillas suelen guardarse en minúsculas (idproducto)
-            String productoUrl = baseUrl + "/rest/v1/productos?idproducto=eq." + idProductoStr + "&select=idproducto,nombre,precioVenta";
+            // URL con columnas en minúsculas exactas
+            String productoUrl = baseUrl + "/rest/v1/productos?idproducto=eq." + idProductoStr + "&select=idproducto,nombre,precioventa";
 
             List<Map<String, Object>> productosEncontrados = restClient.get()
                     .uri(productoUrl)
@@ -199,7 +200,7 @@ public class VentasBotStrategy implements BotStrategy {
 
             Map<String, Object> prodData = productosEncontrados.get(0);
             String nombreProducto = prodData.get("nombre").toString();
-            double precioUnitario = Double.parseDouble(prodData.get("precioVenta").toString());
+            double precioUnitario = Double.parseDouble(prodData.get("precioventa").toString());
 
             double subtotal = precioUnitario * cantidad;
             double itbis = subtotal * 0.18;
@@ -219,16 +220,14 @@ public class VentasBotStrategy implements BotStrategy {
                     "👉 Responde *SÍ* para confirmar o *NO* para cancelar.";
 
         } catch (Exception e) {
-            // 🔥 AQUÍ IMPRIMIMOS EL ERROR REAL EN LA CONSOLA PARA VERLO
             System.err.println("❌ ERROR REAL EN RESUMEN DE VENTA: " + e.getMessage());
             e.printStackTrace();
-
             sessionService.clearSession(instanceName, phoneNumber);
-            return "⚠️ Error técnico: " + e.getMessage(); // Te lo mandará temporalmente al chat para que lo veas de una vez
+            return "⚠️ Ocurrió un error al consultar el producto para el resumen.";
         }
     }
 
-    // --- PROCESAR VENTA REAL EN SUPABASE ---
+    // --- PROCESAR VENTA REAL EN SUPABASE (TODO EN MINÚSCULAS) ---
     private String procesarVentaConIdReal(Integracion integracion, String idProductoStr, int cantidad, String metodoPago) {
         try {
             String rawUrl = integracion.getBaseUrl();
@@ -241,7 +240,8 @@ public class VentasBotStrategy implements BotStrategy {
             String token = (configuracion != null && configuracion.containsKey("api_token"))
                     ? configuracion.get("api_token").toString() : "";
 
-            String productoUrl = baseUrl + "/rest/v1/productos?idProducto=eq." + idProductoStr + "&select=idProducto,nombre,precioVenta";
+            // URL con columnas en minúsculas exactas
+            String productoUrl = baseUrl + "/rest/v1/productos?idproducto=eq." + idProductoStr + "&select=idproducto,nombre,precioventa";
 
             List<Map<String, Object>> productosEncontrados = restClient.get()
                     .uri(productoUrl)
@@ -256,8 +256,8 @@ public class VentasBotStrategy implements BotStrategy {
 
             Map<String, Object> prodData = productosEncontrados.get(0);
             String nombreProducto = prodData.get("nombre").toString();
-            double precioUnitario = Double.parseDouble(prodData.get("precioVenta").toString());
-            long idProductoReal = Long.parseLong(prodData.get("idProducto").toString());
+            double precioUnitario = Double.parseDouble(prodData.get("precioventa").toString());
+            long idProductoReal = Long.parseLong(prodData.get("idproducto").toString());
 
             double subtotal = precioUnitario * cantidad;
             double itbis = subtotal * 0.18;
@@ -321,6 +321,7 @@ public class VentasBotStrategy implements BotStrategy {
 
         } catch (Exception e) {
             System.err.println("Error en venta por ID: " + e.getMessage());
+            e.printStackTrace();
             return "⚠️ Ocurrió un error al procesar la venta en la base de datos.";
         }
     }

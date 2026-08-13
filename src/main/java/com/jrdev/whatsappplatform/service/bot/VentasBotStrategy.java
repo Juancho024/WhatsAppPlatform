@@ -265,7 +265,7 @@ public class VentasBotStrategy implements BotStrategy {
 
             // ⚠️ LLAVES CORREGIDAS A MINÚSCULAS SEGÚN EL HINT DE SUPABASE
             Map<String, Object> facturaParams = new HashMap<>();
-            facturaParams.put("p_ncf", "B0100000001");
+            facturaParams.put("p_ncf", "B01" + System.currentTimeMillis());
             facturaParams.put("p_tipocomprobante", "CREDITO_FISCAL"); // 👈 Corregido
             facturaParams.put("p_subtotal", subtotal);
             facturaParams.put("p_itbis", itbis);

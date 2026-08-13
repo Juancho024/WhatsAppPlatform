@@ -201,17 +201,20 @@ public class SystemManagerBotStrategy implements BotStrategy {
         }
     }
 
-    // --- UTILIDAD: LIMPIAR URL ---
+    // --- UTILIDAD: LIMPIAR URL (CORREGIDA) ---
     private String obtenerBaseUrlLimpia(String rawUrl) {
         if (rawUrl == null) return "";
-        // Si por casualidad guardaste la URL con /api/ algo, lo cortamos para que quede solo el dominio
-        if (rawUrl.contains("/api")) {
-            return rawUrl.substring(0, rawUrl.indexOf("/api"));
-        }
+
         // Si termina en slash, se lo quitamos
         if (rawUrl.endsWith("/")) {
-            return rawUrl.substring(0, rawUrl.length() - 1);
+            rawUrl = rawUrl.substring(0, rawUrl.length() - 1);
         }
+
+        // Solo quitamos /api si está exactamente AL FINAL de la URL (por si lo guardaste así por error)
+        if (rawUrl.endsWith("/api")) {
+            rawUrl = rawUrl.substring(0, rawUrl.length() - 4);
+        }
+
         return rawUrl;
     }
 

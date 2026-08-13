@@ -1,0 +1,251 @@
+package com.jrdev.whatsappplatform.service.bot;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.jrdev.whatsappplatform.model.*;
+import com.jrdev.whatsappplatform.service.EvolutionClient;
+import com.jrdev.whatsappplatform.service.SessionService;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class SystemManagerBotStrategy implements BotStrategy {
+
+    private final EvolutionClient evolutionClient;
+    private final RestClient restClient;
+    private final SessionService sessionService;
+
+    @Override
+    public boolean soporta(String tipoIntegracion) {
+        // Esta clase se activará cuando la empresa en la BD diga "MANTENIMIENTO"
+        return "MANTENIMIENTO".equalsIgnoreCase(tipoIntegracion);
+    }
+
+    @Override
+    public void procesarMensaje(WhatsappInstancia instancia, Contacto contacto, Mensaje mensaje, Integracion integracion) {
+        String texto = mensaje.getContenido().trim();
+        String instanceName = instancia.getInstanceName();
+        String phoneNumber = contacto.getRemotejid().replace("@s.whatsapp.net", "");
+        String respuesta = "";
+
+        String estadoActual = sessionService.getUserState(instanceName, phoneNumber);
+
+        switch (estadoActual) {
+            case "NUEVO_CHAT":
+                respuesta = "🏢 *Panel de SystemManager* 🏢\n\n" +
+                        "¡Hola " + contacto.getNombre() + "! Bienvenido a la administración del residencial.\n\n" +
+                        "Elige una opción:\n" +
+                        "1️⃣ Ver todos los propietarios\n" +
+                        "2️⃣ Ver propietarios con deudas (Rojo) 🔴\n" +
+                        "3️⃣ Ver reportes financieros\n" +
+                        "4️⃣ Ver logs del sistema 💻\n" +
+                        "5️⃣ Salir";
+                sessionService.saveUserState(instanceName, phoneNumber, "ESPERANDO_OPCION_MANTENIMIENTO");
+                break;
+
+            case "ESPERANDO_OPCION_MANTENIMIENTO":
+                if (texto.equals("1")) {
+                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Consultando la lista de propietarios... ⏳");
+                    respuesta = consultarPropietarios(integracion, false);
+                    sessionService.clearSession(instanceName, phoneNumber);
+
+                } else if (texto.equals("2")) {
+                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Filtrando propietarios con deudas pendientes... ⏳");
+                    respuesta = consultarPropietarios(integracion, true); // true = solo deudores
+                    sessionService.clearSession(instanceName, phoneNumber);
+
+                } else if (texto.equals("3")) {
+                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Obteniendo los últimos reportes financieros... ⏳");
+                    respuesta = consultarReportesFinancieros(integracion);
+                    sessionService.clearSession(instanceName, phoneNumber);
+
+                } else if (texto.equals("4")) {
+                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Extrayendo el registro de actividad del sistema... ⏳");
+                    respuesta = consultarLogsActividad(integracion);
+                    sessionService.clearSession(instanceName, phoneNumber);
+
+                } else if (texto.equals("5")) {
+                    respuesta = "¡Sesión cerrada! Escríbeme cuando necesites revisar el residencial de nuevo. 👋";
+                    sessionService.clearSession(instanceName, phoneNumber);
+
+                } else {
+                    respuesta = "❌ Opción no válida. Por favor responde con un número del 1 al 5.";
+                }
+                break;
+
+            default:
+                sessionService.clearSession(instanceName, phoneNumber);
+                respuesta = "Tu sesión ha expirado. Escribe cualquier cosa para volver a ver el menú.";
+                break;
+        }
+
+        if (!respuesta.isEmpty()) {
+            evolutionClient.enviarMensaje(instanceName, phoneNumber, respuesta);
+        }
+    }
+
+    // --- 1 y 2. CONSULTAR PROPIETARIOS (Y DEUDORES) ---
+    private String consultarPropietarios(Integracion integracion, boolean soloDeudores) {
+        try {
+            String baseUrl = obtenerBaseUrlLimpia(integracion.getBaseUrl());
+            String endpoint = baseUrl + "/api/propietarios";
+
+            List<PropietarioDto> propietarios = restClient.get()
+                    .uri(endpoint)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<PropietarioDto>>() {});
+
+            if (propietarios == null || propietarios.isEmpty()) {
+                return "No hay propietarios registrados en el sistema.";
+            }
+
+            StringBuilder sb = new StringBuilder();
+            if (soloDeudores) {
+                sb.append("🔴 *PROPIETARIOS EN MORA*\n\n");
+                // Filtramos por estado "Rojo" o balance negativo
+                propietarios = propietarios.stream()
+                        .filter(p -> "Rojo".equalsIgnoreCase(p.getEstado()) || p.getBalance() < 0)
+                        .collect(Collectors.toList());
+
+                if (propietarios.isEmpty()) {
+                    return "✅ ¡Excelentes noticias! Ningún propietario tiene deudas actualmente.";
+                }
+            } else {
+                sb.append("👥 *LISTA DE PROPIETARIOS*\n\n");
+            }
+
+            for (PropietarioDto p : propietarios) {
+                String iconoEstado = "Verde".equalsIgnoreCase(p.getEstado()) ? "🟢" : "🔴";
+                sb.append(iconoEstado).append(" *Apto ").append(p.getNumApto()).append("* - ").append(p.getNombrePropietario()).append("\n");
+                sb.append("   🔹 Balance: $").append(p.getBalance()).append("\n");
+                sb.append("   🔹 Total Abonado: $").append(p.getTotalabonado()).append("\n\n");
+            }
+            return sb.toString();
+
+        } catch (Exception e) {
+            System.err.println("Error consultando propietarios: " + e.getMessage());
+            return "⚠️ Ocurrió un error al conectar con la API de SystemManager.";
+        }
+    }
+
+    // --- 3. CONSULTAR REPORTES FINANCIEROS ---
+    private String consultarReportesFinancieros(Integracion integracion) {
+        try {
+            String baseUrl = obtenerBaseUrlLimpia(integracion.getBaseUrl());
+            String endpoint = baseUrl + "/api/registro-financiero";
+
+            List<RegistroFinancieroDto> registros = restClient.get()
+                    .uri(endpoint)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<RegistroFinancieroDto>>() {});
+
+            if (registros == null || registros.isEmpty()) {
+                return "No hay reportes financieros registrados.";
+            }
+
+            StringBuilder sb = new StringBuilder("📊 *ÚLTIMOS REPORTES FINANCIEROS*\n\n");
+
+            // Mostramos solo los últimos 5 para no saturar el chat de WhatsApp
+            registros.stream().limit(5).forEach(r -> {
+                sb.append("📅 *Mes:* ").append(r.getMesCuota()).append("\n");
+                sb.append("📝 *Descripción:* ").append(r.getDescripcion()).append("\n");
+                sb.append("💵 *Cuota:* $").append(r.getCuotaMensual()).append(" | *Total:* $").append(r.getMontoPagar()).append("\n");
+                sb.append("〰️〰️〰️〰️〰️〰️〰️〰️\n");
+            });
+
+            return sb.toString();
+
+        } catch (Exception e) {
+            System.err.println("Error consultando reportes: " + e.getMessage());
+            return "⚠️ Ocurrió un error al consultar los reportes financieros.";
+        }
+    }
+
+    // --- 4. CONSULTAR LOGS DE ACTIVIDAD ---
+    private String consultarLogsActividad(Integracion integracion) {
+        try {
+            String baseUrl = obtenerBaseUrlLimpia(integracion.getBaseUrl());
+            String endpoint = baseUrl + "/api/activityLog";
+
+            List<ActivityLogDto> logs = restClient.get()
+                    .uri(endpoint)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<ActivityLogDto>>() {});
+
+            if (logs == null || logs.isEmpty()) {
+                return "No hay actividad reciente en el sistema.";
+            }
+
+            StringBuilder sb = new StringBuilder("💻 *LOGS DEL SISTEMA (Últimos 10)*\n\n");
+
+            // Invertimos o simplemente tomamos los últimos 10 (asumiendo que los más nuevos están al final o al inicio)
+            // Si el API los manda del más viejo al más nuevo, podrías querer invertir la lista antes.
+            logs.stream().limit(10).forEach(log -> {
+                sb.append("🕒 *").append(log.getFecha()).append("*\n");
+                sb.append("🏷️ [").append(log.getCategoria()).append("]\n");
+                sb.append("💬 ").append(log.getMensaje()).append("\n\n");
+            });
+
+            return sb.toString();
+
+        } catch (Exception e) {
+            System.err.println("Error consultando logs: " + e.getMessage());
+            return "⚠️ Ocurrió un error al obtener el registro de actividad.";
+        }
+    }
+
+    // --- UTILIDAD: LIMPIAR URL ---
+    private String obtenerBaseUrlLimpia(String rawUrl) {
+        if (rawUrl == null) return "";
+        // Si por casualidad guardaste la URL con /api/ algo, lo cortamos para que quede solo el dominio
+        if (rawUrl.contains("/api")) {
+            return rawUrl.substring(0, rawUrl.indexOf("/api"));
+        }
+        // Si termina en slash, se lo quitamos
+        if (rawUrl.endsWith("/")) {
+            return rawUrl.substring(0, rawUrl.length() - 1);
+        }
+        return rawUrl;
+    }
+
+    // ==========================================
+    // CLASES DTO INTERNAS PARA MAPEAR LOS JSON
+    // ==========================================
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PropietarioDto {
+        private Long idpropietario;
+        private String numApto;
+        private String nombrePropietario;
+        private double totalabonado;
+        private double balance;
+        private String estado;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RegistroFinancieroDto {
+        private Long id;
+        private String mesCuota;
+        private double cuotaMensual;
+        private String descripcion;
+        private double montoPagar;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ActivityLogDto {
+        private Long idactivity;
+        private String fecha;
+        private String categoria;
+        private String mensaje;
+    }
+}

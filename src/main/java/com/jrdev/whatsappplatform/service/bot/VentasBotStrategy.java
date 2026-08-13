@@ -227,7 +227,7 @@ public class VentasBotStrategy implements BotStrategy {
         }
     }
 
-    // --- PROCESAR VENTA REAL EN SUPABASE (TODO EN MINÚSCULAS) ---
+    // --- PROCESAR VENTA REAL EN SUPABASE (PARÁMETROS EN MINÚSCULAS) ---
     private String procesarVentaConIdReal(Integracion integracion, String idProductoStr, int cantidad, String metodoPago) {
         try {
             String rawUrl = integracion.getBaseUrl();
@@ -263,14 +263,15 @@ public class VentasBotStrategy implements BotStrategy {
             double itbis = subtotal * 0.18;
             double total = subtotal + itbis;
 
+            // ⚠️ LLAVES CORREGIDAS A MINÚSCULAS SEGÚN EL HINT DE SUPABASE
             Map<String, Object> facturaParams = new HashMap<>();
             facturaParams.put("p_ncf", "B0100000001");
-            facturaParams.put("p_tipoComprobante", "CREDITO_FISCAL");
+            facturaParams.put("p_tipocomprobante", "CREDITO_FISCAL"); // 👈 Corregido
             facturaParams.put("p_subtotal", subtotal);
             facturaParams.put("p_itbis", itbis);
             facturaParams.put("p_total", total);
-            facturaParams.put("p_metodoPago", metodoPago);
-            facturaParams.put("p_codigoVenta", "V-" + System.currentTimeMillis());
+            facturaParams.put("p_metodopago", metodoPago);         // 👈 Corregido
+            facturaParams.put("p_codigoventa", "V-" + System.currentTimeMillis()); // 👈 Corregido
             facturaParams.put("p_idcliente", 1L);
             facturaParams.put("p_idempleado", 1L);
 

@@ -263,15 +263,15 @@ public class VentasBotStrategy implements BotStrategy {
             double itbis = subtotal * 0.18;
             double total = subtotal + itbis;
 
-            // ⚠️ LLAVES CORREGIDAS A MINÚSCULAS SEGÚN EL HINT DE SUPABASE
+            // 1. Generar Factura
             Map<String, Object> facturaParams = new HashMap<>();
             facturaParams.put("p_ncf", "B01" + System.currentTimeMillis());
-            facturaParams.put("p_tipocomprobante", "CREDITO_FISCAL"); // 👈 Corregido
+            facturaParams.put("p_tipocomprobante", "CREDITO_FISCAL");
             facturaParams.put("p_subtotal", subtotal);
             facturaParams.put("p_itbis", itbis);
             facturaParams.put("p_total", total);
-            facturaParams.put("p_metodopago", metodoPago);         // 👈 Corregido
-            facturaParams.put("p_codigoventa", "V-" + System.currentTimeMillis()); // 👈 Corregido
+            facturaParams.put("p_metodopago", metodoPago);
+            facturaParams.put("p_codigoventa", "V-" + System.currentTimeMillis());
             facturaParams.put("p_idcliente", 1L);
             facturaParams.put("p_idempleado", 1L);
 
@@ -285,6 +285,7 @@ public class VentasBotStrategy implements BotStrategy {
                     .body(Long.class);
 
             if (idVenta != null && idVenta > 0) {
+                // 2. Registrar Detalle de Venta
                 Map<String, Object> detalleParams = new HashMap<>();
                 detalleParams.put("p_descuento", 0.00);
                 detalleParams.put("p_cantidad", cantidad);
@@ -292,7 +293,8 @@ public class VentasBotStrategy implements BotStrategy {
                 detalleParams.put("p_observacion", "Venta automatizada vía Bot WhatsApp");
                 detalleParams.put("p_preciounitario", precioUnitario);
                 detalleParams.put("p_subtotal", subtotal);
-                detalleParams.put("p_idProducto", idProductoReal);
+                // 🔥 CORREGIDO: p_idproducto en lugar de p_idProducto
+                detalleParams.put("p_idproducto", idProductoReal);
                 detalleParams.put("p_idgarantia", null);
                 detalleParams.put("p_idventa", idVenta);
                 detalleParams.put("p_idarticulo", null);

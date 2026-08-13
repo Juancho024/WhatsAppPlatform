@@ -10,6 +10,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -150,10 +151,12 @@ public class SystemManagerBotStrategy implements BotStrategy {
                 return "No hay reportes financieros registrados.";
             }
 
+            Collections.reverse(registros);
+
             StringBuilder sb = new StringBuilder("📊 *ÚLTIMOS REPORTES FINANCIEROS*\n\n");
 
             // Mostramos solo los últimos 5 para no saturar el chat de WhatsApp
-            registros.stream().limit(5).forEach(r -> {
+            registros.stream().limit(10).forEach(r -> {
                 sb.append("📅 *Mes:* ").append(r.getMesCuota()).append("\n");
                 sb.append("📝 *Descripción:* ").append(r.getDescripcion()).append("\n");
                 sb.append("💵 *Cuota:* $").append(r.getCuotaMensual()).append(" | *Total:* $").append(r.getMontoPagar()).append("\n");
@@ -182,6 +185,8 @@ public class SystemManagerBotStrategy implements BotStrategy {
             if (logs == null || logs.isEmpty()) {
                 return "No hay actividad reciente en el sistema.";
             }
+
+            Collections.reverse(logs);
 
             StringBuilder sb = new StringBuilder("💻 *LOGS DEL SISTEMA (Últimos 10)*\n\n");
 

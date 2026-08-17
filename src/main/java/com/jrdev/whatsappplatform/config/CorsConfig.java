@@ -13,11 +13,11 @@ public class CorsConfig {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/api/**")
-                        .allowedOriginPatterns("http://localhost:*") // Permite cualquier puerto de Vite (5173, 5174, etc.)
+                registry.addMapping("/**") // Cambiado a /** para que cubra TODO tu backend
+                        .allowedOriginPatterns("*") // Permite Localhost y cualquier URL de producción
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
-                        .allowCredentials(true);
+                        .allowCredentials(false); // Cambiado a false para evitar choques con el origin "*"
             }
         };
     }

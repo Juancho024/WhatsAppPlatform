@@ -12,7 +12,6 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -190,8 +189,6 @@ public class SystemManagerBotStrategy implements BotStrategy {
 
             StringBuilder sb = new StringBuilder("💻 *LOGS DEL SISTEMA (Últimos 10)*\n\n");
 
-            // Invertimos o simplemente tomamos los últimos 10 (asumiendo que los más nuevos están al final o al inicio)
-            // Si el API los manda del más viejo al más nuevo, podrías querer invertir la lista antes.
             logs.stream().limit(10).forEach(log -> {
                 sb.append("🕒 *").append(log.getFecha()).append("*\n");
                 sb.append("🏷️ [").append(log.getCategoria()).append("]\n");
@@ -206,20 +203,15 @@ public class SystemManagerBotStrategy implements BotStrategy {
         }
     }
 
-    // --- UTILIDAD: LIMPIAR URL (CORREGIDA) ---
+    // --- UTILIDAD: LIMPIAR URL ---
     private String obtenerBaseUrlLimpia(String rawUrl) {
         if (rawUrl == null) return "";
-
-        // Si termina en slash, se lo quitamos
         if (rawUrl.endsWith("/")) {
             rawUrl = rawUrl.substring(0, rawUrl.length() - 1);
         }
-
-        // Solo quitamos /api si está exactamente AL FINAL de la URL (por si lo guardaste así por error)
         if (rawUrl.endsWith("/api")) {
             rawUrl = rawUrl.substring(0, rawUrl.length() - 4);
         }
-
         return rawUrl;
     }
 

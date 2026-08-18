@@ -96,7 +96,7 @@ public class WhatsappInstanciaController {
             String respuestaEvolution = evolutionClient.crearInstancia(instancia.getInstanceName());
 
             // 2. Si Evolution no falló, guardamos el registro en PostgreSQL
-            instancia.setEstado("ACTIVA");
+            instancia.setEstado("PENDIENTE");
             Long idInstancia = instanciaRepository.crear(instancia);
 
             // 3. Devolvemos el JSON de Evolution (que trae el QR) al frontend (o a Postman)

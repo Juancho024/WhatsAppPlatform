@@ -93,12 +93,25 @@ public class WhatsappInstanciaService {
 
 
     public void activar(Long id) {
+        // 1. Buscamos los datos de la instancia que estaba pendiente
+        WhatsappInstancia instancia = buscarPorId(id);
 
+        if (instancia == null) {
+            throw new RuntimeException("WhatsApp Instancia no encontrada");
+        }
+
+        // 2. AHORA es que mandamos a crear la instancia real en Evolution API
+        try {
+            evolutionClient.crearInstancia(instancia.getInstanceName());
+        } catch (Exception e) {
+            throw new RuntimeException("Error creando la instancia en Evolution API: " + e.getMessage());
+        }
+
+        // 3. Si Evolution la creó bien, le cambiamos el estado a ACTIVA en tu base de datos
         int filas = repository.cambiarEstado(id, "ACTIVA");
 
         if (filas == 0) {
-
-            throw new RuntimeException("WhatsApp Instancia no encontrada");
+            throw new RuntimeException("No se pudo actualizar el estado en la base de datos");
         }
     }
 
@@ -114,7 +127,7 @@ public class WhatsappInstanciaService {
 
         String respuesta = evolutionClient.conectar(instancia.getInstanceName());
 
-        repository.cambiarEstado(id, "ACTIVA");
+        repository.cambiarEstado(id, "CONECTANDO");
 
         return respuesta;
     }
@@ -146,7 +159,7 @@ public class WhatsappInstanciaService {
 
         String respuesta = evolutionClient.desconectar(instancia.getInstanceName());
 
-        repository.cambiarEstado(id, "INACTIVA");
+        repository.cambiarEstado(id, "DESCONECTADA");
 
         return respuesta;
     }

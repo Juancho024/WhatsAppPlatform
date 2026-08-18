@@ -69,8 +69,14 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas.");
             }
 
-            // 3. ¡Login exitoso!
-            return ResponseEntity.ok("Inicio de sesión exitoso.");
+            // 3. ¡Login exitoso! Creamos el JSON con los datos del usuario para el Header de React
+            java.util.Map<String, Object> respuesta = new java.util.HashMap<>();
+            respuesta.put("mensaje", "Inicio de sesión exitoso");
+            respuesta.put("nombreCompleto", usuario.getNombreCompleto());
+            respuesta.put("correo", usuario.getCorreo());
+            respuesta.put("rol", usuario.getRol());
+
+            return ResponseEntity.ok(respuesta.toString());
         } catch (Exception e) {
             System.err.println("Error en el inicio de sesión: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el inicio de sesión.");

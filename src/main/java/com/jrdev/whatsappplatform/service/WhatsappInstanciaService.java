@@ -94,7 +94,7 @@ public class WhatsappInstanciaService {
 
     public void activar(Long id) {
 
-        int filas = repository.cambiarEstado(id, "DESCONECTADA");
+        int filas = repository.cambiarEstado(id, "ACTIVA");
 
         if (filas == 0) {
 
@@ -114,7 +114,7 @@ public class WhatsappInstanciaService {
 
         String respuesta = evolutionClient.conectar(instancia.getInstanceName());
 
-        repository.cambiarEstado(id, "CONECTANDO");
+        repository.cambiarEstado(id, "ACTIVA");
 
         return respuesta;
     }
@@ -146,7 +146,7 @@ public class WhatsappInstanciaService {
 
         String respuesta = evolutionClient.desconectar(instancia.getInstanceName());
 
-        repository.cambiarEstado(id, "DESCONECTADA");
+        repository.cambiarEstado(id, "INACTIVA");
 
         return respuesta;
     }

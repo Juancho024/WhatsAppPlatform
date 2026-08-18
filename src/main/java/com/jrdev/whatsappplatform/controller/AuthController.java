@@ -51,7 +51,7 @@ public class AuthController {
     }
 
     @PostMapping("/iniciar")
-    public ResponseEntity<String> registrarUsuario(@RequestBody LoginRequestDto request){
+    public ResponseEntity<Object> iniciarSesion(@RequestBody LoginRequestDto request){
         try {
             // 1. Buscar el usuario por nombre de usuario
             var usuarioOpt = usuarioRepository.findByUsuario(request.getUsuario());
@@ -76,7 +76,7 @@ public class AuthController {
             respuesta.put("correo", usuario.getCorreo());
             respuesta.put("rol", usuario.getRol());
 
-            return ResponseEntity.ok(respuesta.toString());
+            return ResponseEntity.ok(respuesta);
         } catch (Exception e) {
             System.err.println("Error en el inicio de sesión: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el inicio de sesión.");

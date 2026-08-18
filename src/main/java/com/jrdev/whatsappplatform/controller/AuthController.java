@@ -1,5 +1,6 @@
 package com.jrdev.whatsappplatform.controller;
 
+import com.jrdev.whatsappplatform.dto.LoginRequestDto;
 import com.jrdev.whatsappplatform.dto.RegistroRequestDto;
 import com.jrdev.whatsappplatform.model.Usuario;
 import com.jrdev.whatsappplatform.repository.UsuarioRepository;
@@ -46,6 +47,33 @@ public class AuthController {
         } catch (Exception e) {
             System.err.println("Error en el registro: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el registro.");
+        }
+    }
+
+    @PostMapping("/iniciar")
+    public ResponseEntity<String> registrarUsuario(@RequestBody LoginRequestDto request){
+        try {
+            // 1. Buscar el usuario por nombre de usuario
+            var usuarioOpt = usuarioRepository.findByUsuario(request.getUsuario());
+            // Si el usuario no existe, devolvemos error 401
+            if (usuarioOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas.");
+            }
+
+            Usuario usuario = usuarioOpt.get();
+
+            // 2. Verificamos la contraseña encriptada
+            boolean passwordCorrecta = BCrypt.checkpw(request.getPassword(), usuario.getPasswordHash());
+
+            if (!passwordCorrecta) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas.");
+            }
+
+            // 3. ¡Login exitoso!
+            return ResponseEntity.ok("Inicio de sesión exitoso.");
+        } catch (Exception e) {
+            System.err.println("Error en el inicio de sesión: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el inicio de sesión.");
         }
     }
 

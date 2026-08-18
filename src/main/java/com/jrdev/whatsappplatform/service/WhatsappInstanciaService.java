@@ -167,4 +167,7 @@ public class WhatsappInstanciaService {
 
         evolutionClient.enviarMensaje(instancia.getInstanceName(), numero, texto);
     }
+    public List<WhatsappInstancia> buscarPorEmpresa(Long idEmpresa) {
+        return repository.buscarPorEmpresa(idEmpresa);
+    }
 }

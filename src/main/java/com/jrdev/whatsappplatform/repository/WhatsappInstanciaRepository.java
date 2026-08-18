@@ -150,4 +150,24 @@ public class WhatsappInstanciaRepository {
         String sql = "UPDATE whatsapp_instancia SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE id_whatsapp_instancia = ?";
         return jdbcTemplate.update(sql, estado, id);
     }
+
+    public List<WhatsappInstancia> buscarPorEmpresa(Long idEmpresa) {
+        String sql = "SELECT id_whatsapp_instancia, id_empresa, nombre, instance_name, numero, provider, api_url, api_key, estado, fecha_creacion, fecha_actualizacion FROM whatsapp_instancia WHERE id_empresa = ?";
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            WhatsappInstancia instancia = new WhatsappInstancia();
+            instancia.setIdWhatsappInstancia(rs.getLong("id_whatsapp_instancia"));
+            instancia.setIdEmpresa(rs.getLong("id_empresa"));
+            instancia.setNombre(rs.getString("nombre"));
+            instancia.setInstanceName(rs.getString("instance_name"));
+            instancia.setNumero(rs.getString("numero"));
+            instancia.setProvider(rs.getString("provider"));
+            instancia.setApiUrl(rs.getString("api_url"));
+            instancia.setApiKey(rs.getString("api_key"));
+            instancia.setEstado(rs.getString("estado"));
+            instancia.setFechaCreacion(rs.getObject("fecha_creacion", java.time.OffsetDateTime.class));
+            instancia.setFechaActualizacion(rs.getObject("fecha_actualizacion", java.time.OffsetDateTime.class));
+            return instancia;
+        }, idEmpresa);
+    }
 }

@@ -108,4 +108,9 @@ public class WhatsappInstanciaController {
         }
     }
 
+    @GetMapping("/empresa/{idEmpresa}")
+    public List<WhatsappInstancia> obtenerPorEmpresa(@PathVariable Long idEmpresa) {
+        return service.buscarPorEmpresa(idEmpresa);
+    }
+
 }

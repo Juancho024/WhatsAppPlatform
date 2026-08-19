@@ -2,6 +2,7 @@ package com.jrdev.whatsappplatform.controller;
 
 import com.jrdev.whatsappplatform.model.Empresa;
 import com.jrdev.whatsappplatform.repository.EmpresaRepository;
+import com.jrdev.whatsappplatform.repository.UsuarioEmpresaRepository;
 import com.jrdev.whatsappplatform.service.EmpresaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/empresas")
@@ -17,6 +19,7 @@ public class EmpresaController {
 
     private final EmpresaService empresaService;
     private final EmpresaRepository empresaRepository;
+    private final UsuarioEmpresaRepository usuarioEmpresaRepository;
 
     @GetMapping
     public List<Empresa> obtenerEmpresas() {
@@ -81,6 +84,20 @@ public class EmpresaController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest().body("❌ Error al registrar la empresa: " + e.getMessage());
+        }
+    }
+    @GetMapping("/mis-empresas")
+    public ResponseEntity<List<Map<String, Object>>> obtenerMisEmpresas(jakarta.servlet.http.HttpServletRequest request) {
+        try {
+            Long idUsuario = (Long) request.getAttribute("idUsuarioAutenticado");
+
+            // Reutilizamos tu repositorio para buscar solo las de este usuario
+            List<Map<String, Object>> misEmpresas = usuarioEmpresaRepository.obtenerEmpresasPorUsuario(idUsuario);
+
+            return ResponseEntity.ok(misEmpresas);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

@@ -27,7 +27,6 @@ public class Usuario {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    private String rol;
     private String estado;
 
     @Column(name = "fecha_creacion", updatable = false)
@@ -36,7 +35,6 @@ public class Usuario {
     @PrePersist
     protected void onCreate() {
         this.fechaCreacion = LocalDateTime.now();
-        if (this.rol == null) this.rol = "CLIENTE";
         if (this.estado == null) this.estado = "ACTIVO";
     }
 }

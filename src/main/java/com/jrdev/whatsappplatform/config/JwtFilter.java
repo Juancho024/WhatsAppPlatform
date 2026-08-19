@@ -22,6 +22,18 @@ public class JwtFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
+        // 🔥 SIEMPRE INCLUIR ESTAS CABECERAS PARA EVITAR BLOQUEOS DE CORS
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+        response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With");
+        response.setHeader("Access-Control-Max-Age", "3600");
+
+        // Si el navegador manda una petición de prueba (OPTIONS), la aprobamos de inmediato
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            response.setStatus(HttpServletResponse.SC_OK);
+            return;
+        }
+
         String path = request.getRequestURI();
 
         // 1. ZONAS PÚBLICAS
@@ -30,41 +42,27 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 2. DEJAR PASAR EL PREFLIGHT DE CORS (OPTIONS) SIEMPRE
-        if (request.getMethod().equals("OPTIONS")) {
-            response.setStatus(HttpServletResponse.SC_OK);
-            return;
-        }
-
-        // 3. REVISAR LA CABECERA
+        // 2. REVISAR LA CABECERA DE AUTORIZACIÓN
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            rechazarPeticion(response, "Acceso denegado. Falta el Token JWT.");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("{\"error\": \"Falta el Token JWT.\"}");
             return;
         }
 
-        // 4. EXTRAER Y VALIDAR EL TOKEN
+        // 3. EXTRAER Y VALIDAR EL TOKEN
         String token = authHeader.substring(7);
 
         if (!jwtService.validarToken(token)) {
-            rechazarPeticion(response, "El Token es invalido o ya ha expirado.");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("{\"error\": \"Token invalido o expirado.\"}");
             return;
         }
 
-        // 5. GUARDAR ID Y DEJAR PASAR
+        // 4. GUARDAR ID Y DEJAR PASAR
         Long idUsuario = jwtService.extraerIdUsuario(token);
         request.setAttribute("idUsuarioAutenticado", idUsuario);
         filterChain.doFilter(request, response);
-    }
-
-    // 🔥 FUNCIÓN MÁGICA PARA RECHAZAR SIN ROMPER EL CORS DE REACT 🔥
-    private void rechazarPeticion(HttpServletResponse response, String mensaje) throws IOException {
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
-        response.setHeader("Access-Control-Allow-Headers", "*");
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType("application/json");
-        response.getWriter().write("{\"error\": \"" + mensaje + "\"}");
     }
 }

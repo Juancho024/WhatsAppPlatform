@@ -4,24 +4,31 @@ import com.jrdev.whatsappplatform.dto.LoginRequestDto;
 import com.jrdev.whatsappplatform.dto.RegistroRequestDto;
 import com.jrdev.whatsappplatform.model.Usuario;
 import com.jrdev.whatsappplatform.repository.UsuarioRepository;
+import com.jrdev.whatsappplatform.repository.UsuarioEmpresaRepository; // <-- Importamos tu nuevo repo
+import com.jrdev.whatsappplatform.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.mindrot.jbcrypt.BCrypt;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // Fundamental para evitar errores de CORS con React
+@CrossOrigin(origins = "*")
 public class AuthController {
 
     private final UsuarioRepository usuarioRepository;
+    private final UsuarioEmpresaRepository usuarioEmpresaRepository;
+    private final JwtService jwtService;
 
     @PostMapping("/registro")
     public ResponseEntity<String> registrarUsuario(@RequestBody RegistroRequestDto request) {
         try {
-            // 1. Validaciones de seguridad básicas
             if (usuarioRepository.existsByCorreo(request.getCorreo())) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body("El correo ya está registrado.");
             }
@@ -29,11 +36,9 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body("El nombre de usuario no está disponible.");
             }
 
-            // 2. Encriptar la contraseña (¡Nunca en texto plano!)
-            String salt = BCrypt.gensalt(12); // Nivel de seguridad alto
+            String salt = BCrypt.gensalt(12);
             String hashPassword = BCrypt.hashpw(request.getPassword(), salt);
 
-            // 3. Crear y guardar el nuevo usuario
             Usuario nuevoUsuario = new Usuario();
             nuevoUsuario.setNombreCompleto(request.getNombreCompleto());
             nuevoUsuario.setUsuario(request.getUsuario());
@@ -41,6 +46,10 @@ public class AuthController {
             nuevoUsuario.setPasswordHash(hashPassword);
 
             usuarioRepository.save(nuevoUsuario);
+
+            // NOTA: Cuando un usuario se registra por primera vez, no tiene empresas.
+            // Más adelante tendrás que hacer un endpoint para que cree su primera empresa
+            // y se inserte en la tabla usuario_empresa como DUEÑO.
 
             return ResponseEntity.status(HttpStatus.CREATED).body("Usuario registrado con éxito.");
 
@@ -53,28 +62,33 @@ public class AuthController {
     @PostMapping("/iniciar")
     public ResponseEntity<Object> iniciarSesion(@RequestBody LoginRequestDto request){
         try {
-            // 1. Buscar el usuario por nombre de usuario
             var usuarioOpt = usuarioRepository.findByUsuario(request.getUsuario());
-            // Si el usuario no existe, devolvemos error 401
             if (usuarioOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas.");
             }
 
             Usuario usuario = usuarioOpt.get();
 
-            // 2. Verificamos la contraseña encriptada
             boolean passwordCorrecta = BCrypt.checkpw(request.getPassword(), usuario.getPasswordHash());
 
             if (!passwordCorrecta) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales incorrectas.");
             }
 
-            // 3. ¡Login exitoso! Creamos el JSON con los datos del usuario para el Header de React
-            java.util.Map<String, Object> respuesta = new java.util.HashMap<>();
+            // 🔥 AQUÍ ESTÁ LA MAGIA DEL SAAS 🔥
+            // Buscamos todas las empresas donde este usuario tiene poder
+            List<Map<String, Object>> empresasVinculadas = usuarioEmpresaRepository.obtenerEmpresasPorUsuario(usuario.getIdUsuario());
+
+            // 🔥 CREAMOS EL TOKEN (LA PULSERA VIP)
+            String token = jwtService.generarToken(usuario.getIdUsuario(), usuario.getCorreo());
+
+            Map<String, Object> respuesta = new HashMap<>();
             respuesta.put("mensaje", "Inicio de sesión exitoso");
+            respuesta.put("token", token);
+            respuesta.put("idUsuario", usuario.getIdUsuario());
             respuesta.put("nombreCompleto", usuario.getNombreCompleto());
             respuesta.put("correo", usuario.getCorreo());
-            respuesta.put("rol", usuario.getRol());
+            respuesta.put("empresas", empresasVinculadas);
 
             return ResponseEntity.ok(respuesta);
         } catch (Exception e) {
@@ -82,6 +96,4 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el inicio de sesión.");
         }
     }
-
-
 }

@@ -69,11 +69,15 @@ public class EmpresaController {
     }
 
     @PostMapping("/registrar")
-    public ResponseEntity<String> registrarEmpresa(@RequestBody Empresa empresa) {
+    public ResponseEntity<String> registrarEmpresa(@RequestBody Empresa empresa, jakarta.servlet.http.HttpServletRequest request) {
         try {
-            //no devuelve el idgenerado
-            Long idGenerado = empresaRepository.crear(empresa);
-            return ResponseEntity.ok("✅ Empresa registrada exitosamente con ID: " + idGenerado);
+            // Sacamos el ID 100% seguro que el JwtFilter preparó para nosotros
+            Long idUsuario = (Long) request.getAttribute("idUsuarioAutenticado");
+
+            // Se lo pasamos a tu servicio
+            Long idGenerado = empresaService.crearEmpresaYVincular(empresa, idUsuario);
+
+            return ResponseEntity.ok("✅ Empresa registrada y vinculada a ti como DUEÑO exitosamente con ID: " + idGenerado);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest().body("❌ Error al registrar la empresa: " + e.getMessage());

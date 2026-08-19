@@ -2,8 +2,10 @@ package com.jrdev.whatsappplatform.service;
 
 import com.jrdev.whatsappplatform.model.Empresa;
 import com.jrdev.whatsappplatform.repository.EmpresaRepository;
+import com.jrdev.whatsappplatform.repository.UsuarioEmpresaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -12,6 +14,23 @@ import java.util.List;
 public class EmpresaService {
 
     private final EmpresaRepository empresaRepository;
+    private final UsuarioEmpresaRepository usuarioEmpresaRepository; // <-- Inyectar
+
+    @Transactional
+    public Long crearEmpresaYVincular(Empresa empresa, Long idUsuarioCreador) {
+
+        // 1. Creamos la empresa en la BD y obtenemos su ID
+        Long idEmpresa = empresaRepository.crear(empresa);
+
+        if (idEmpresa == null) {
+            throw new RuntimeException("No se pudo generar el ID de la nueva empresa.");
+        }
+
+        // 2. Vinculamos inmediatamente a este usuario como el DUEÑO de la empresa
+        usuarioEmpresaRepository.vincularUsuarioAEmpresa(idUsuarioCreador, idEmpresa, "DUEÑO");
+
+        return idEmpresa;
+    }
 
     public List<Empresa> buscarTodas() {
         return empresaRepository.buscarTodas();

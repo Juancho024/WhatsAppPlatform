@@ -3,6 +3,7 @@ package com.jrdev.whatsappplatform.service.bot;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.jrdev.whatsappplatform.model.*;
 import com.jrdev.whatsappplatform.repository.ChatRepository;
+import com.jrdev.whatsappplatform.repository.ContactoRepository;
 import com.jrdev.whatsappplatform.repository.MensajeRepository;
 import com.jrdev.whatsappplatform.service.EvolutionClient;
 import com.jrdev.whatsappplatform.service.SessionService;
@@ -25,9 +26,10 @@ public class SystemManagerBotStrategy implements BotStrategy {
     private final RestClient restClient;
     private final SessionService sessionService;
 
-    // 🔥 1. INYECTAMOS TUS REPOSITORIOS PARA LA BASE DE DATOS
+    // 🔥 1. TUS REPOSITORIOS PARA LA BASE DE DATOS
     private final ChatRepository chatRepo;
     private final MensajeRepository mensajeRepo;
+    private final ContactoRepository contactoRepo; // <-- AGREGADO
 
     @Override
     public boolean soporta(String tipoIntegracion) {
@@ -58,7 +60,6 @@ public class SystemManagerBotStrategy implements BotStrategy {
 
             case "ESPERANDO_OPCION_MANTENIMIENTO":
                 if (texto.equals("1")) {
-                    // 🔥 2. USAMOS TU LÓGICA DE GUARDAR Y ENVIAR (Reemplaza al evolutionClient directo)
                     enviarYGuardarMensaje(instancia, contacto, "Consultando la lista de propietarios... ⏳");
                     respuesta = consultarPropietarios(integracion, false);
                     sessionService.clearSession(instanceName, phoneNumber);
@@ -94,7 +95,6 @@ public class SystemManagerBotStrategy implements BotStrategy {
         }
 
         if (!respuesta.isEmpty()) {
-            // 🔥 Y AQUÍ GUARDAMOS LA RESPUESTA FINAL DEL BOT
             enviarYGuardarMensaje(instancia, contacto, respuesta);
         }
     }
@@ -102,21 +102,38 @@ public class SystemManagerBotStrategy implements BotStrategy {
     // ==========================================
     // 🔥 TU LÓGICA MÁGICA DE GUARDADO EN BD
     // ==========================================
-    private void enviarYGuardarMensaje(WhatsappInstancia instancia, Contacto contacto, String textoMensaje) {
-        String phoneNumber = contacto.getRemotejid().replace("@s.whatsapp.net", "");
+    private void enviarYGuardarMensaje(WhatsappInstancia instancia, Contacto contactoMemoria, String textoMensaje) {
+        String phoneNumber = contactoMemoria.getRemotejid().replace("@s.whatsapp.net", "");
 
         // 1. ENVIAR FÍSICAMENTE POR EVOLUTION API
         evolutionClient.enviarMensaje(instancia.getInstanceName(), phoneNumber, textoMensaje);
 
         try {
-            // 2. BUSCAR O CREAR CHAT
-            Chat chat = chatRepo.buscarPorInstanciaYContacto(instancia.getIdWhatsappInstancia(), contacto.getIdContacto()).orElse(null);
+            // 🔥 2. BUSCAR EL CONTACTO REAL EN LA BD (El de memoria no tiene ID)
+            Contacto contactoReal = contactoRepo.buscarPorRemoteJid(contactoMemoria.getRemotejid()).orElse(null);
+
+            if (contactoReal == null) {
+                // Si no existe, lo creamos rapidito
+                contactoReal = new Contacto();
+                contactoReal.setIdEmpresa(instancia.getIdEmpresa());
+                contactoReal.setNumeroTelefono(phoneNumber);
+                contactoReal.setRemotejid(contactoMemoria.getRemotejid());
+                contactoReal.setNombre(contactoMemoria.getNombre());
+                contactoReal.setTipo("PERSONA");
+                contactoReal.setBloqueado(false);
+
+                Long idContacto = contactoRepo.crear(contactoReal);
+                contactoReal.setIdContacto(idContacto);
+            }
+
+            // 3. BUSCAR O CREAR CHAT (Ahora sí con el ID real)
+            Chat chat = chatRepo.buscarPorInstanciaYContacto(instancia.getIdWhatsappInstancia(), contactoReal.getIdContacto()).orElse(null);
 
             if (chat == null) {
                 chat = new Chat();
                 chat.setIdWhatsAppInstancia(instancia.getIdWhatsappInstancia());
-                chat.setIdContacto(contacto.getIdContacto());
-                chat.setRemotejid(contacto.getRemotejid());
+                chat.setIdContacto(contactoReal.getIdContacto());
+                chat.setRemotejid(contactoReal.getRemotejid());
                 chat.setEstado("ABIERTO");
                 chat.setUnread_count(0);
                 chat.setUltima_actividad(OffsetDateTime.now());
@@ -125,7 +142,7 @@ public class SystemManagerBotStrategy implements BotStrategy {
                 chat.setIdChat(idChat);
             }
 
-            // 3. GUARDAR EL MENSAJE COMO SALIENTE EN LA BD
+            // 4. GUARDAR EL MENSAJE COMO SALIENTE EN LA BD
             Mensaje msjSaliente = new Mensaje();
             msjSaliente.setIdChat(chat.getIdChat());
             msjSaliente.setContenido(textoMensaje);
@@ -137,7 +154,7 @@ public class SystemManagerBotStrategy implements BotStrategy {
 
             mensajeRepo.crear(msjSaliente);
 
-            // 4. ACTUALIZAR ÚLTIMA ACTIVIDAD DEL CHAT PARA QUE SUBA EN LA LISTA
+            // 5. ACTUALIZAR ÚLTIMA ACTIVIDAD DEL CHAT
             chatRepo.actualizarUltimaActividad(chat.getIdChat());
 
         } catch (Exception e) {

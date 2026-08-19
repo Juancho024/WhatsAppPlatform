@@ -88,14 +88,18 @@ public class EmpresaController {
     }
     @GetMapping("/mis-empresas")
     public ResponseEntity<List<Map<String, Object>>> obtenerMisEmpresas(jakarta.servlet.http.HttpServletRequest request) {
+        System.out.println("========== DEBUG /mis-empresas ==========");
         try {
             Long idUsuario = (Long) request.getAttribute("idUsuarioAutenticado");
+            System.out.println("El Filtro JWT dejó pasar al Usuario ID: " + idUsuario);
 
-            // Reutilizamos tu repositorio para buscar solo las de este usuario
             List<Map<String, Object>> misEmpresas = usuarioEmpresaRepository.obtenerEmpresasPorUsuario(idUsuario);
+            System.out.println("Devolviendo a React " + misEmpresas.size() + " empresas.");
+            System.out.println("=========================================");
 
             return ResponseEntity.ok(misEmpresas);
         } catch (Exception e) {
+            System.out.println("❌ ERROR EXPLOSIVO EN /mis-empresas: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }

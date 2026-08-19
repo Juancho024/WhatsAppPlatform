@@ -79,6 +79,12 @@ public class AuthController {
             // Buscamos todas las empresas donde este usuario tiene poder
             List<Map<String, Object>> empresasVinculadas = usuarioEmpresaRepository.obtenerEmpresasPorUsuario(usuario.getIdUsuario());
 
+            System.out.println("========== DEBUG LOGIN ==========");
+            System.out.println("Usuario logueado: " + usuario.getUsuario() + " (ID: " + usuario.getIdUsuario() + ")");
+            System.out.println("Empresas encontradas en la BD: " + empresasVinculadas.size());
+            System.out.println("Detalle empresas: " + empresasVinculadas);
+            System.out.println("=================================");
+
             // 🔥 CREAMOS EL TOKEN (LA PULSERA VIP)
             String token = jwtService.generarToken(usuario.getIdUsuario(), usuario.getCorreo());
 

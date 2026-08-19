@@ -24,46 +24,47 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // 1. ZONAS PÚBLICAS (No piden token)
-        // Dejamos pasar el login, el registro y los webhooks de Evolution
+        // 1. ZONAS PÚBLICAS
         if (path.startsWith("/api/auth/") || path.startsWith("/api/webhooks/")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Si es una petición OPTIONS (Preflight de CORS de React), la dejamos pasar
+        // 2. DEJAR PASAR EL PREFLIGHT DE CORS (OPTIONS) SIEMPRE
         if (request.getMethod().equals("OPTIONS")) {
-            filterChain.doFilter(request, response);
+            response.setStatus(HttpServletResponse.SC_OK);
             return;
         }
 
-        // 2. REVISAR LA CABECERA (Header)
+        // 3. REVISAR LA CABECERA
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"error\": \"Acceso denegado. Falta el Token JWT en la cabecera 'Authorization'.\"}");
+            rechazarPeticion(response, "Acceso denegado. Falta el Token JWT.");
             return;
         }
 
-        // 3. EXTRAER Y VALIDAR EL TOKEN
-        String token = authHeader.substring(7); // Quitamos la palabra "Bearer " (7 caracteres)
+        // 4. EXTRAER Y VALIDAR EL TOKEN
+        String token = authHeader.substring(7);
 
         if (!jwtService.validarToken(token)) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json");
-            response.getWriter().write("{\"error\": \"El Token es invalido o ya ha expirado.\"}");
+            rechazarPeticion(response, "El Token es invalido o ya ha expirado.");
             return;
         }
 
-        // 🔥 4. EL TRUCO MAESTRO: Extraemos el ID del usuario del token
-        // y lo guardamos en la petición. Así los controladores sabrán quién es
-        // sin tener que confiar en lo que manda React.
+        // 5. GUARDAR ID Y DEJAR PASAR
         Long idUsuario = jwtService.extraerIdUsuario(token);
         request.setAttribute("idUsuarioAutenticado", idUsuario);
-
-        // 5. ¡Todo nítido! Lo dejamos pasar al controlador
         filterChain.doFilter(request, response);
+    }
+
+    // 🔥 FUNCIÓN MÁGICA PARA RECHAZAR SIN ROMPER EL CORS DE REACT 🔥
+    private void rechazarPeticion(HttpServletResponse response, String mensaje) throws IOException {
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+        response.setHeader("Access-Control-Allow-Headers", "*");
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\": \"" + mensaje + "\"}");
     }
 }

@@ -138,7 +138,7 @@ public class EvolutionClient {
             // Agregamos "enabled": true, que era lo que Evolution estaba pidiendo a gritos
             Map<String, Object> webhookData = Map.of(
                     "enabled", true,
-                    "url", "http://host.docker.internal:8081/api/webhooks/evolution",
+                    "url", "https://whatsapp-backend-kx8g.onrender.com/api/webhooks/evolution",
                     "webhookByEvents", false,
                     "webhookBase64", false,
                     "events", new String[]{"MESSAGES_UPSERT"}

@@ -2,6 +2,8 @@ package com.jrdev.whatsappplatform.service.bot;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.jrdev.whatsappplatform.model.*;
+import com.jrdev.whatsappplatform.repository.ChatRepository;
+import com.jrdev.whatsappplatform.repository.MensajeRepository;
 import com.jrdev.whatsappplatform.service.EvolutionClient;
 import com.jrdev.whatsappplatform.service.SessionService;
 import lombok.Data;
@@ -10,6 +12,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,9 +25,12 @@ public class SystemManagerBotStrategy implements BotStrategy {
     private final RestClient restClient;
     private final SessionService sessionService;
 
+    // 🔥 1. INYECTAMOS TUS REPOSITORIOS PARA LA BASE DE DATOS
+    private final ChatRepository chatRepo;
+    private final MensajeRepository mensajeRepo;
+
     @Override
     public boolean soporta(String tipoIntegracion) {
-        // Esta clase se activará cuando la empresa en la BD diga "MANTENIMIENTO"
         return "MANTENIMIENTO".equalsIgnoreCase(tipoIntegracion);
     }
 
@@ -52,22 +58,23 @@ public class SystemManagerBotStrategy implements BotStrategy {
 
             case "ESPERANDO_OPCION_MANTENIMIENTO":
                 if (texto.equals("1")) {
-                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Consultando la lista de propietarios... ⏳");
+                    // 🔥 2. USAMOS TU LÓGICA DE GUARDAR Y ENVIAR (Reemplaza al evolutionClient directo)
+                    enviarYGuardarMensaje(instancia, contacto, "Consultando la lista de propietarios... ⏳");
                     respuesta = consultarPropietarios(integracion, false);
                     sessionService.clearSession(instanceName, phoneNumber);
 
                 } else if (texto.equals("2")) {
-                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Filtrando propietarios con deudas pendientes... ⏳");
-                    respuesta = consultarPropietarios(integracion, true); // true = solo deudores
+                    enviarYGuardarMensaje(instancia, contacto, "Filtrando propietarios con deudas pendientes... ⏳");
+                    respuesta = consultarPropietarios(integracion, true);
                     sessionService.clearSession(instanceName, phoneNumber);
 
                 } else if (texto.equals("3")) {
-                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Obteniendo los últimos reportes financieros... ⏳");
+                    enviarYGuardarMensaje(instancia, contacto, "Obteniendo los últimos reportes financieros... ⏳");
                     respuesta = consultarReportesFinancieros(integracion);
                     sessionService.clearSession(instanceName, phoneNumber);
 
                 } else if (texto.equals("4")) {
-                    evolutionClient.enviarMensaje(instanceName, phoneNumber, "Extrayendo el registro de actividad del sistema... ⏳");
+                    enviarYGuardarMensaje(instancia, contacto, "Extrayendo el registro de actividad del sistema... ⏳");
                     respuesta = consultarLogsActividad(integracion);
                     sessionService.clearSession(instanceName, phoneNumber);
 
@@ -87,7 +94,54 @@ public class SystemManagerBotStrategy implements BotStrategy {
         }
 
         if (!respuesta.isEmpty()) {
-            evolutionClient.enviarMensaje(instanceName, phoneNumber, respuesta);
+            // 🔥 Y AQUÍ GUARDAMOS LA RESPUESTA FINAL DEL BOT
+            enviarYGuardarMensaje(instancia, contacto, respuesta);
+        }
+    }
+
+    // ==========================================
+    // 🔥 TU LÓGICA MÁGICA DE GUARDADO EN BD
+    // ==========================================
+    private void enviarYGuardarMensaje(WhatsappInstancia instancia, Contacto contacto, String textoMensaje) {
+        String phoneNumber = contacto.getRemotejid().replace("@s.whatsapp.net", "");
+
+        // 1. ENVIAR FÍSICAMENTE POR EVOLUTION API
+        evolutionClient.enviarMensaje(instancia.getInstanceName(), phoneNumber, textoMensaje);
+
+        try {
+            // 2. BUSCAR O CREAR CHAT
+            Chat chat = chatRepo.buscarPorInstanciaYContacto(instancia.getIdWhatsappInstancia(), contacto.getIdContacto()).orElse(null);
+
+            if (chat == null) {
+                chat = new Chat();
+                chat.setIdWhatsAppInstancia(instancia.getIdWhatsappInstancia());
+                chat.setIdContacto(contacto.getIdContacto());
+                chat.setRemotejid(contacto.getRemotejid());
+                chat.setEstado("ABIERTO");
+                chat.setUnread_count(0);
+                chat.setUltima_actividad(OffsetDateTime.now());
+
+                Long idChat = chatRepo.crear(chat);
+                chat.setIdChat(idChat);
+            }
+
+            // 3. GUARDAR EL MENSAJE COMO SALIENTE EN LA BD
+            Mensaje msjSaliente = new Mensaje();
+            msjSaliente.setIdChat(chat.getIdChat());
+            msjSaliente.setContenido(textoMensaje);
+            msjSaliente.setTipo("text");
+            msjSaliente.setEnviadoPorNosotros(true);
+            msjSaliente.setDireccion("OUTGOING");
+            msjSaliente.setEstado("ENVIADO");
+            msjSaliente.setFechaMensaje(OffsetDateTime.now());
+
+            mensajeRepo.crear(msjSaliente);
+
+            // 4. ACTUALIZAR ÚLTIMA ACTIVIDAD DEL CHAT PARA QUE SUBA EN LA LISTA
+            chatRepo.actualizarUltimaActividad(chat.getIdChat());
+
+        } catch (Exception e) {
+            System.err.println("❌ Error guardando el mensaje del bot en la BD: " + e.getMessage());
         }
     }
 
@@ -109,7 +163,6 @@ public class SystemManagerBotStrategy implements BotStrategy {
             StringBuilder sb = new StringBuilder();
             if (soloDeudores) {
                 sb.append("🔴 *PROPIETARIOS EN MORA*\n\n");
-                // Filtramos por estado "Rojo" o balance negativo
                 propietarios = propietarios.stream()
                         .filter(p -> "Rojo".equalsIgnoreCase(p.getEstado()) || p.getBalance() < 0)
                         .collect(Collectors.toList());
@@ -151,10 +204,8 @@ public class SystemManagerBotStrategy implements BotStrategy {
             }
 
             Collections.reverse(registros);
-
             StringBuilder sb = new StringBuilder("📊 *ÚLTIMOS REPORTES FINANCIEROS*\n\n");
 
-            // Mostramos solo los últimos 5 para no saturar el chat de WhatsApp
             registros.stream().limit(10).forEach(r -> {
                 sb.append("📅 *Mes:* ").append(r.getMesCuota()).append("\n");
                 sb.append("📝 *Descripción:* ").append(r.getDescripcion()).append("\n");
@@ -186,7 +237,6 @@ public class SystemManagerBotStrategy implements BotStrategy {
             }
 
             Collections.reverse(logs);
-
             StringBuilder sb = new StringBuilder("💻 *LOGS DEL SISTEMA (Últimos 10)*\n\n");
 
             logs.stream().limit(10).forEach(log -> {
@@ -206,19 +256,14 @@ public class SystemManagerBotStrategy implements BotStrategy {
     // --- UTILIDAD: LIMPIAR URL ---
     private String obtenerBaseUrlLimpia(String rawUrl) {
         if (rawUrl == null) return "";
-        if (rawUrl.endsWith("/")) {
-            rawUrl = rawUrl.substring(0, rawUrl.length() - 1);
-        }
-        if (rawUrl.endsWith("/api")) {
-            rawUrl = rawUrl.substring(0, rawUrl.length() - 4);
-        }
+        if (rawUrl.endsWith("/")) rawUrl = rawUrl.substring(0, rawUrl.length() - 1);
+        if (rawUrl.endsWith("/api")) rawUrl = rawUrl.substring(0, rawUrl.length() - 4);
         return rawUrl;
     }
 
     // ==========================================
     // CLASES DTO INTERNAS PARA MAPEAR LOS JSON
     // ==========================================
-
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PropietarioDto {

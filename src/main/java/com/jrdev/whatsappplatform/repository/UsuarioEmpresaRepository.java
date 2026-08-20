@@ -38,7 +38,7 @@ public class UsuarioEmpresaRepository {
     // Este método devuelve la lista de empresas y el rol que tiene el usuario en cada una
     public List<Map<String, Object>> obtenerEmpresasPorUsuario(Long idUsuario) {
         String sql = """
-            SELECT e.id_empresa, e.nombre AS nombre_empresa, ue.rol_empresa 
+            SELECT e.id_empresa, e.nombre AS nombre_empresa, e.identificacion, e.email, e.telefono, e.estado, ue.rol_empresa 
             FROM empresa e 
             JOIN usuario_empresa ue ON e.id_empresa = ue.id_empresa 
             WHERE ue.id_usuario = ? AND ue.estado = 'ACTIVO' AND e.estado = 'ACTIVA'

@@ -42,12 +42,28 @@ public class EmpresaController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Void> actualizar(@PathVariable Long id, @RequestBody Empresa empresa) {
-        boolean actualizada = empresaService.actualizar(id, empresa);
-        if (!actualizada) {
-            return ResponseEntity.notFound().build();
+    public ResponseEntity<Void> actualizar(@PathVariable Long id, @RequestBody Map<String, Object> payload, jakarta.servlet.http.HttpServletRequest request) {
+        try {
+            Long idUsuario = (Long) request.getAttribute("idUsuarioAutenticado");
+
+            Empresa empresa = new Empresa();
+            empresa.setNombre((String) payload.get("nombre"));
+            empresa.setIdentificacion((String) payload.get("identificacion"));
+            empresa.setEmail((String) payload.get("email"));
+            empresa.setTelefono((String) payload.get("telefono"));
+            empresa.setEstado((String) payload.get("estado"));
+
+            String nuevoRol = (String) payload.get("rol_empresa");
+
+            boolean actualizada = empresaService.actualizarEmpresaYRol(id, empresa, idUsuario, nuevoRol);
+            if (!actualizada) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}")
@@ -72,20 +88,31 @@ public class EmpresaController {
     }
 
     @PostMapping("/registrar")
-    public ResponseEntity<String> registrarEmpresa(@RequestBody Empresa empresa, jakarta.servlet.http.HttpServletRequest request) {
+    public ResponseEntity<String> registrarEmpresa(@RequestBody Map<String, Object> payload, jakarta.servlet.http.HttpServletRequest request) {
         try {
-            // Sacamos el ID 100% seguro que el JwtFilter preparó para nosotros
             Long idUsuario = (Long) request.getAttribute("idUsuarioAutenticado");
 
-            // Se lo pasamos a tu servicio
-            Long idGenerado = empresaService.crearEmpresaYVincular(empresa, idUsuario);
+            // Mapeamos los datos de la empresa desde el payload recibido de React
+            Empresa empresa = new Empresa();
+            empresa.setNombre((String) payload.get("nombre"));
+            empresa.setIdentificacion((String) payload.get("identificacion"));
+            empresa.setEmail((String) payload.get("email"));
+            empresa.setTelefono((String) payload.get("telefono"));
+            empresa.setEstado((String) payload.get("estado"));
 
-            return ResponseEntity.ok("✅ Empresa registrada y vinculada a ti como DUEÑO exitosamente con ID: " + idGenerado);
+            // 🔥 Capturamos el rol que seleccionó en el combobox (por defecto DUEÑO si viene vacío)
+            String rolEmpresa = (String) payload.getOrDefault("rol_empresa", "DUEÑO");
+
+            // Se lo pasamos al servicio junto al rol elegido
+            Long idGenerado = empresaService.crearEmpresaYVincular(empresa, idUsuario, rolEmpresa);
+
+            return ResponseEntity.ok("✅ Empresa registrada y vinculada exitosamente con ID: " + idGenerado);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest().body("❌ Error al registrar la empresa: " + e.getMessage());
         }
     }
+
     @GetMapping("/mis-empresas")
     public ResponseEntity<List<Map<String, Object>>> obtenerMisEmpresas(jakarta.servlet.http.HttpServletRequest request) {
         System.out.println("========== DEBUG /mis-empresas ==========");

@@ -17,19 +17,29 @@ public class EmpresaService {
     private final UsuarioEmpresaRepository usuarioEmpresaRepository; // <-- Inyectar
 
     @Transactional
-    public Long crearEmpresaYVincular(Empresa empresa, Long idUsuarioCreador) {
-
+    public Long crearEmpresaYVincular(Empresa empresa, Long idUsuarioCreador, String rolEmpresa) {
         // 1. Creamos la empresa en la BD y obtenemos su ID
         Long idEmpresa = empresaRepository.crear(empresa);
-
         if (idEmpresa == null) {
             throw new RuntimeException("No se pudo generar el ID de la nueva empresa.");
         }
-
-        // 2. Vinculamos inmediatamente a este usuario como el DUEÑO de la empresa
-        usuarioEmpresaRepository.vincularUsuarioAEmpresa(idUsuarioCreador, idEmpresa, "DUEÑO");
+        // 2. Vinculamos al usuario usando el rol seleccionado en el combobox
+        String rolFinal = (rolEmpresa != null && !rolEmpresa.isBlank()) ? rolEmpresa : "DUEÑO";
+        usuarioEmpresaRepository.vincularUsuarioAEmpresa(idUsuarioCreador, idEmpresa, rolFinal);
 
         return idEmpresa;
+    }
+
+    @Transactional
+    public boolean actualizarEmpresaYRol(Long idEmpresa, Empresa empresa, Long idUsuario, String nuevoRol) {
+        // 1. Actualizamos los datos generales de la empresa
+        int filasEmpresa = empresaRepository.actualizar(idEmpresa, empresa);
+
+        // 2. Actualizamos el rol del usuario en la tabla intermedia usuario_empresa
+        String rolFinal = (nuevoRol != null && !nuevoRol.isBlank()) ? nuevoRol : "DUEÑO";
+        int filasRol = usuarioEmpresaRepository.actualizarRolUsuarioEnEmpresa(idUsuario, idEmpresa, rolFinal);
+
+        return (filasEmpresa > 0 || filasRol > 0);
     }
 
     public List<Empresa> buscarTodas() {

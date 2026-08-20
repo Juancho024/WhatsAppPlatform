@@ -35,6 +35,11 @@ public class UsuarioEmpresaRepository {
         }
     }
 
+    public int actualizarRolUsuarioEnEmpresa(Long idUsuario, Long idEmpresa, String nuevoRol) {
+        String sql = "UPDATE usuario_empresa SET rol_empresa = ? WHERE id_usuario = ? AND id_empresa = ?";
+        return jdbcTemplate.update(sql, nuevoRol, idUsuario, idEmpresa);
+    }
+
     // Este método devuelve la lista de empresas y el rol que tiene el usuario en cada una
     public List<Map<String, Object>> obtenerEmpresasPorUsuario(Long idUsuario) {
         String sql = """

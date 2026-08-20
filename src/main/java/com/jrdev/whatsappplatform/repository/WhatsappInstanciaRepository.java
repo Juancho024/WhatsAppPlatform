@@ -141,6 +141,11 @@ public class WhatsappInstanciaRepository {
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject(sql, Boolean.class, instanceName));
     }
 
+    public int actualizarEstadoPorInstanceName(String instanceName, String nuevoEstado) {
+        String sql = "UPDATE whatsapp_instancia SET estado = ?, fecha_actualizacion = CURRENT_TIMESTAMP WHERE instance_name = ?";
+        return jdbcTemplate.update(sql, nuevoEstado, instanceName);
+    }
+
     public int actualizar(Long id, WhatsappInstancia instancia) {
         String sql = "UPDATE whatsapp_instancia SET id_empresa = ?, nombre = ?, instance_name = ?, numero = ?, provider = ?, api_url = ?, api_key = ?, estado = ? WHERE id_whatsapp_instancia = ?";
         return jdbcTemplate.update(sql, instancia.getIdEmpresa(), instancia.getNombre(), instancia.getInstanceName(), instancia.getNumero(), instancia.getProvider(), instancia.getApiUrl(), instancia.getApiKey(), instancia.getEstado(), id);

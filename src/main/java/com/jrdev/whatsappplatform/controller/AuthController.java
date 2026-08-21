@@ -92,6 +92,7 @@ public class AuthController {
             respuesta.put("mensaje", "Inicio de sesión exitoso");
             respuesta.put("token", token);
             respuesta.put("idUsuario", usuario.getIdUsuario());
+            respuesta.put("usuario", usuario.getUsuario());
             respuesta.put("nombreCompleto", usuario.getNombreCompleto());
             respuesta.put("correo", usuario.getCorreo());
             respuesta.put("empresas", empresasVinculadas);

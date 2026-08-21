@@ -117,18 +117,11 @@ public class WhatsappInstanciaService {
 
 
     public String conectar(Long id) {
-
         WhatsappInstancia instancia = buscarPorId(id);
-
         if (instancia == null) {
-
             throw new RuntimeException("WhatsApp Instancia no encontrada");
         }
-
         String respuesta = evolutionClient.conectar(instancia.getInstanceName());
-
-        repository.cambiarEstado(id, "CONECTANDO");
-
         return respuesta;
     }
 
@@ -149,18 +142,11 @@ public class WhatsappInstanciaService {
 
 
     public String desconectar(Long id) {
-
         WhatsappInstancia instancia = buscarPorId(id);
-
         if (instancia == null) {
-
             throw new RuntimeException("WhatsApp Instancia no encontrada");
         }
-
         String respuesta = evolutionClient.desconectar(instancia.getInstanceName());
-
-        repository.cambiarEstado(id, "DESCONECTADA");
-
         return respuesta;
     }
 

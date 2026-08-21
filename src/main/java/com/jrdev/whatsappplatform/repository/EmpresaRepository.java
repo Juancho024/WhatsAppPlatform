@@ -42,6 +42,36 @@ public class EmpresaRepository {
         });
     }
 
+    public List<Empresa> findEmpresasByUsuarioId(Long idUsuario) {
+        String sql = "SELECT e.id_empresa, e.nombre, e.identificacion, e.email, e.telefono, e.estado, e.fecha_creacion, e.fecha_actualizacion " +
+                "FROM empresa e " +
+                "JOIN usuario_empresa ue ON e.id_empresa = ue.id_empresa " +
+                "WHERE ue.id_usuario = ?";
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Empresa empresa = new Empresa();
+            empresa.setIdEmpresa(rs.getLong("id_empresa"));
+            empresa.setNombre(rs.getString("nombre"));
+            empresa.setIdentificacion(rs.getString("identificacion"));
+            empresa.setEmail(rs.getString("email"));
+            empresa.setTelefono(rs.getString("telefono"));
+            empresa.setEstado(rs.getString("estado"));
+            if (rs.getObject("fecha_creacion") != null) {
+                empresa.setFechaCreacion(rs.getObject("fecha_creacion", java.time.OffsetDateTime.class));
+            }
+            if (rs.getObject("fecha_actualizacion") != null) {
+                empresa.setFechaActualizacion(rs.getObject("fecha_actualizacion", java.time.OffsetDateTime.class));
+            }
+            return empresa;
+        }, idUsuario);
+    }
+
+    // 2. Método para eliminar una empresa por su ID (las cascadas del SQL harán el resto)
+    public int eliminarEmpresaPorId(Long idEmpresa) {
+        String sql = "DELETE FROM empresa WHERE id_empresa = ?";
+        return jdbcTemplate.update(sql, idEmpresa);
+    }
+
     public Optional<Empresa> buscarPorId(Long id) {
         String sql = "SELECT id_empresa, nombre, identificacion, email, telefono, estado, fecha_creacion, fecha_actualizacion FROM empresa WHERE id_empresa = ?";
         List<Empresa> resultados = jdbcTemplate.query(sql, (rs, rowNum) -> new Empresa(rs.getLong("id_empresa"), rs.getString("nombre"), rs.getString("identificacion"), rs.getString("email"), rs.getString("telefono"), rs.getString("estado"), rs.getObject("fecha_creacion", java.time.OffsetDateTime.class), rs.getObject("fecha_actualizacion", java.time.OffsetDateTime.class)), id);

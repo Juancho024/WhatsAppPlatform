@@ -35,6 +35,28 @@ public class UsuarioEmpresaRepository {
         }
     }
 
+    public List<Map<String, Object>> obtenerMiembrosDeEmpresa(Long idEmpresa) {
+        String sql = "SELECT u.id_usuario, u.nombre_completo, u.correo, ue.rol_empresa, ue.estado " +
+                "FROM usuarios u " +
+                "JOIN usuario_empresa ue ON u.id_usuario = ue.id_usuario " +
+                "WHERE ue.id_empresa = ?";
+
+        return jdbcTemplate.queryForList(sql, idEmpresa);
+    }
+
+    // 🔥 Reemplaza el existsByIdUsuarioAndIdEmpresa
+    public boolean existeVinculo(Long idUsuario, Long idEmpresa) {
+        String sql = "SELECT COUNT(*) FROM usuario_empresa WHERE id_usuario = ? AND id_empresa = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, idUsuario, idEmpresa);
+        return count != null && count > 0;
+    }
+
+    // 🔥 Reemplaza el save()
+    public void vincularUsuario(Long idUsuario, Long idEmpresa, String rolEmpresa) {
+        String sql = "INSERT INTO usuario_empresa (id_usuario, id_empresa, rol_empresa, estado) VALUES (?, ?, ?, 'ACTIVO')";
+        jdbcTemplate.update(sql, idUsuario, idEmpresa, rolEmpresa);
+    }
+
     public int actualizarRolUsuarioEnEmpresa(Long idUsuario, Long idEmpresa, String nuevoRol) {
         String sql = "UPDATE usuario_empresa SET rol_empresa = ? WHERE id_usuario = ? AND id_empresa = ?";
         return jdbcTemplate.update(sql, nuevoRol, idUsuario, idEmpresa);

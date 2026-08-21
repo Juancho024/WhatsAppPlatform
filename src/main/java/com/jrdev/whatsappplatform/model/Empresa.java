@@ -1,6 +1,10 @@
 package com.jrdev.whatsappplatform.model;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.OneToMany;
+
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Objects;
 
 public class Empresa {
@@ -16,6 +20,12 @@ public class Empresa {
 
     public Empresa() {
     }
+
+    @OneToMany(mappedBy = "empresa", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<WhatsappInstancia> instancias;
+
+    @OneToMany(mappedBy = "empresa", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Contacto> contactos;
 
     public Empresa(Long idEmpresa, String nombre, String identificacion, String email, String telefono, String estado, OffsetDateTime fechaCreacion, OffsetDateTime fechaActualizacion) {
         this.idEmpresa = idEmpresa;

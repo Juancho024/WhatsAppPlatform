@@ -1,9 +1,12 @@
 package com.jrdev.whatsappplatform.model;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.OneToMany;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Getter
@@ -20,6 +23,9 @@ public class Chat {
     private OffsetDateTime ultima_actividad;
     private Map<String, Object> metadata;
     private OffsetDateTime fechaCreacion;
+
+    @OneToMany(mappedBy = "chat", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Mensaje> mensajes;
 
     public Chat() {}
 

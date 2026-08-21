@@ -2,6 +2,10 @@ package com.jrdev.whatsappplatform.model;
 
 import java.time.OffsetDateTime;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.OneToMany;
+
+import java.util.List;
 import java.util.Objects;
 
 public class WhatsappInstancia {
@@ -28,6 +32,9 @@ public class WhatsappInstancia {
     private OffsetDateTime fechaCreacion;
 
     private OffsetDateTime fechaActualizacion;
+
+    @OneToMany(mappedBy = "instancia", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Chat> chats;
 
     public WhatsappInstancia() {
     }

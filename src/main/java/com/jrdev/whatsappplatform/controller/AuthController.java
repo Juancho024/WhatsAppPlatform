@@ -1,6 +1,7 @@
 package com.jrdev.whatsappplatform.controller;
 
 import com.jrdev.whatsappplatform.dto.LoginRequestDto;
+import com.jrdev.whatsappplatform.dto.PasswordRequestDto;
 import com.jrdev.whatsappplatform.dto.RegistroRequestDto;
 import com.jrdev.whatsappplatform.model.Usuario;
 import com.jrdev.whatsappplatform.repository.UsuarioRepository;
@@ -8,10 +9,13 @@ import com.jrdev.whatsappplatform.repository.UsuarioEmpresaRepository; // <-- Im
 import com.jrdev.whatsappplatform.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.mindrot.jbcrypt.BCrypt;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -25,6 +29,8 @@ public class AuthController {
     private final UsuarioRepository usuarioRepository;
     private final UsuarioEmpresaRepository usuarioEmpresaRepository;
     private final JwtService jwtService;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @PostMapping("/registro")
     public ResponseEntity<String> registrarUsuario(@RequestBody RegistroRequestDto request) {
@@ -101,6 +107,32 @@ public class AuthController {
         } catch (Exception e) {
             System.err.println("Error en el inicio de sesión: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el inicio de sesión.");
+        }
+    }
+
+    @PostMapping("/cambiar-password")
+    public ResponseEntity<Object> changePassword (@RequestBody PasswordRequestDto request, Principal principal) {
+        try {
+            String username = principal.getName();
+            Usuario usuario = usuarioRepository.findByUsuario(username)
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado."));
+
+            // 2. Verificar si la contraseña actual coincide
+            if (!passwordEncoder.matches(request.getNowPassword(), usuario.getPasswordHash())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("La contraseña actual es incorrecta.");
+            }
+
+            // 3. Encriptar la nueva contraseña
+            String nuevaPasswordEncriptada = passwordEncoder.encode(request.getRepeatPassword());
+
+            // 4. Guardar en la base de datos
+            usuario.setPasswordHash(nuevaPasswordEncriptada);
+            usuarioRepository.save(usuario);
+
+            return ResponseEntity.ok("Contraseña cambiada exitosamente.");
+        } catch (Exception e){
+            System.err.println("Error al cambiar la constraseña: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al cambiar la constraseña.");
         }
     }
 }

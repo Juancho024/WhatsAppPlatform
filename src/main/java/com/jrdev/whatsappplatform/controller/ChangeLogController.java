@@ -19,6 +19,7 @@ public class ChangeLogController {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> obtenerChangelogs() {
         try {

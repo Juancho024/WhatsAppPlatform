@@ -183,14 +183,20 @@ public class EmpresaController {
     }
 
     @PostMapping("/aceptar-invitacion")
-    public ResponseEntity<Object> aceptarInvitacion(@RequestBody Map<String, String> request, Principal principal) {
+    public ResponseEntity<Object> aceptarInvitacion(@RequestBody Map<String, String> request) {
         try {
             String token = request.get("token");
+            String username = request.get("usuario"); // 🔥 Ahora lo sacamos del JSON del Frontend
+
             if (token == null || token.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Token no proporcionado.");
             }
 
-            // 1. Buscamos la invitación en la base de datos
+            if (username == null || username.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Usuario no identificado en la sesión.");
+            }
+
+            // 1. Buscamos la invitación
             Optional<Map<String, Object>> invitacionOpt = invitacionRepository.buscarPorToken(token);
             if (invitacionOpt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Invitación no válida o no existe.");
@@ -198,25 +204,24 @@ public class EmpresaController {
 
             Map<String, Object> invitacion = invitacionOpt.get();
 
-            // 2. Verificamos que la invitación siga pendiente
+            // 2. Verificamos que esté pendiente
             if (!"PENDIENTE".equals(invitacion.get("estado"))) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Esta invitación ya fue procesada o cancelada.");
             }
 
-            // 3. 🔥 AQUÍ ESTÁ LA CLAVE: Obtenemos al usuario que acaba de iniciar sesión (sin importar su correo)
-            String username = principal.getName();
+            // 3. Buscamos al usuario usando el username que nos mandó React
             Usuario usuarioLogueado = usuarioRepository.findByUsuario(username)
-                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado en la sesión actual."));
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado en la base de datos."));
 
             Long idEmpresa = ((Number) invitacion.get("id_empresa")).longValue();
             String rolAsignado = (String) invitacion.get("rol_asignado");
 
-            // 4. Vinculamos LA CUENTA QUE INICIÓ SESIÓN con la empresa
+            // 4. Vinculamos la cuenta
             if (!usuarioEmpresaRepository.existeVinculo(usuarioLogueado.getIdUsuario(), idEmpresa)) {
                 usuarioEmpresaRepository.vincularUsuario(usuarioLogueado.getIdUsuario(), idEmpresa, rolAsignado);
             }
 
-            // 5. Marcamos el token de invitación como ACEPTADA para que no se pueda usar dos veces
+            // 5. Marcamos la invitación como ACEPTADA
             invitacionRepository.actualizarEstado(token, "ACEPTADA");
 
             return ResponseEntity.ok("¡Bienvenido al equipo! Invitación vinculada a tu cuenta con éxito.");

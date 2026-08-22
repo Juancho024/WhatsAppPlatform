@@ -28,6 +28,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Permite conexiones externas
                 .csrf(csrf -> csrf.disable()) // Desactiva la protección de formularios tradicionales (usamos JWT)
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/webhooks/**").permitAll()
                         .anyRequest().permitAll() // Por ahora permitimos todo para que el CORS pase
                 );
 

@@ -1,5 +1,6 @@
 package com.jrdev.whatsappplatform.controller;
 
+import com.jrdev.whatsappplatform.repository.ChangeLogRepository;
 import com.jrdev.whatsappplatform.repository.WhatsappInstanciaRepository;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -8,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -18,6 +20,7 @@ public class WebhookController {
     private final ObjectMapper objectMapper;
     private final WebhookProcessingService webhookService;
     private final WhatsappInstanciaRepository instanciaRepository;
+    private final ChangeLogRepository changelogRepository;
 
     @PostMapping("/evolution")
     public ResponseEntity<String> recibirEvolution(@RequestBody String payload) {
@@ -56,6 +59,33 @@ public class WebhookController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Error procesando payload: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/github")
+    public ResponseEntity<String> recibirCommitGithub(@RequestBody Map<String, Object> payload) {
+        try {
+            // Verificamos que el JSON traiga la lista de commits
+            if (payload.containsKey("commits")) {
+                List<Map<String, Object>> commits = (List<Map<String, Object>>) payload.get("commits");
+
+                for (Map<String, Object> commit : commits) {
+                    String hash = (String) commit.get("id");
+                    String mensaje = (String) commit.get("message");
+                    String fecha = (String) commit.get("timestamp");
+
+                    Map<String, String> authorMap = (Map<String, String>) commit.get("author");
+                    String autor = authorMap.get("name");
+
+                    // Guardamos en la base de datos
+                    changelogRepository.guardarCommit(hash, mensaje, autor, fecha);
+                    System.out.println("Nuevo commit guardado: " + mensaje);
+                }
+            }
+            return ResponseEntity.ok("Webhook procesado correctamente");
+        } catch (Exception e) {
+            System.err.println("Error procesando webhook de GitHub: " + e.getMessage());
+            return ResponseEntity.status(500).body("Error interno");
         }
     }
 }

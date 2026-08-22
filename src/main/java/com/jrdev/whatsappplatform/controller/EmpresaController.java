@@ -5,8 +5,10 @@ import com.jrdev.whatsappplatform.model.Empresa;
 import com.jrdev.whatsappplatform.model.Usuario;
 import com.jrdev.whatsappplatform.model.UsuarioEmpresa;
 import com.jrdev.whatsappplatform.repository.EmpresaRepository;
+import com.jrdev.whatsappplatform.repository.InvitacionRepository;
 import com.jrdev.whatsappplatform.repository.UsuarioEmpresaRepository;
 import com.jrdev.whatsappplatform.repository.UsuarioRepository;
+import com.jrdev.whatsappplatform.service.EmailService;
 import com.jrdev.whatsappplatform.service.EmpresaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,6 +19,7 @@ import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/empresas")
@@ -27,6 +30,8 @@ public class EmpresaController {
     private final EmpresaRepository empresaRepository;
     private final UsuarioEmpresaRepository usuarioEmpresaRepository;
     private final UsuarioRepository usuarioRepository;
+    private final InvitacionRepository invitacionRepository;
+    private final EmailService emailService;
 
     @GetMapping
     public List<Empresa> obtenerEmpresas() {
@@ -140,45 +145,85 @@ public class EmpresaController {
     }
 
     @PostMapping("/{idEmpresa}/invitar")
-    public ResponseEntity<Object> invitarMiembro(
-            @PathVariable Long idEmpresa,
-            @RequestBody InvitarMiembroDto request) {
+    public ResponseEntity<Object> invitarMiembro(@PathVariable Long idEmpresa, @RequestBody InvitarMiembroDto request) {
         try {
-            // 1. Buscamos si el correo pertenece a un usuario (Usando tu JPA de Usuario)
-            Optional<Usuario> usuarioOpt = usuarioRepository.findByCorreo(request.getEmail());
+            String correoDestino = request.getEmail();
 
-            if (usuarioOpt.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body("El usuario con el correo " + request.getEmail() + " no tiene cuenta en la plataforma. Pídele que se registre primero.");
-            }
-
-            Usuario usuarioEncontrado = usuarioOpt.get();
-            Long idUsuario = usuarioEncontrado.getIdUsuario();
-
-            // 2. Verificamos que la empresa exista (Usando tu método buscarPorId de JdbcTemplate)
+            // 1. Verificamos que la empresa exista
             Optional<Empresa> empresaOpt = empresaRepository.buscarPorId(idEmpresa);
             if (empresaOpt.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body("La empresa no existe.");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("La empresa no existe.");
             }
 
-            // 3. Verificamos si ya está vinculado (Usando nuestro nuevo método JDBC)
-            boolean yaVinculado = usuarioEmpresaRepository.existeVinculo(idUsuario, idEmpresa);
+            // 2. Verificamos si el correo ya es de un usuario registrado para evitar invitar a alguien que ya está dentro
+            Optional<Usuario> usuarioOpt = usuarioRepository.findByCorreo(correoDestino);
 
-            if (yaVinculado) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("Este usuario ya es miembro de la organización.");
+            if (usuarioOpt.isPresent()) {
+                boolean yaVinculado = usuarioEmpresaRepository.existeVinculo(usuarioOpt.get().getIdUsuario(), idEmpresa);
+                if (yaVinculado) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body("Este usuario ya es miembro de la organización.");
+                }
             }
 
-            // 4. Lo vinculamos insertándolo directo con SQL (Usando nuestro nuevo método JDBC)
-            usuarioEmpresaRepository.vincularUsuario(idUsuario, idEmpresa, request.getRol_empresa());
+            // 3. Generamos el token y guardamos la invitación (¡sin importar si existe en la plataforma o no!)
+            String token = UUID.randomUUID().toString();
+            invitacionRepository.guardarInvitacion(idEmpresa, correoDestino, request.getRol_empresa(), token);
 
-            return ResponseEntity.ok("Miembro vinculado exitosamente a la empresa.");
+            // 4. Enviamos el correo con el link
+            emailService.enviarInvitacion(correoDestino, empresaOpt.get().getNombre(), token);
+
+            return ResponseEntity.ok("Invitación enviada por correo exitosamente.");
 
         } catch (Exception e) {
             System.err.println("Error al invitar miembro: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error procesando la invitación.");
+        }
+    }
+
+    @PostMapping("/aceptar-invitacion")
+    public ResponseEntity<Object> aceptarInvitacion(@RequestBody Map<String, String> request, Principal principal) {
+        try {
+            String token = request.get("token");
+            if (token == null || token.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Token no proporcionado.");
+            }
+
+            // 1. Buscamos la invitación en la base de datos
+            Optional<Map<String, Object>> invitacionOpt = invitacionRepository.buscarPorToken(token);
+            if (invitacionOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Invitación no válida o no existe.");
+            }
+
+            Map<String, Object> invitacion = invitacionOpt.get();
+
+            // 2. Verificamos que la invitación siga pendiente
+            if (!"PENDIENTE".equals(invitacion.get("estado"))) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Esta invitación ya fue procesada o cancelada.");
+            }
+
+            // 3. 🔥 AQUÍ ESTÁ LA CLAVE: Obtenemos al usuario que acaba de iniciar sesión (sin importar su correo)
+            String username = principal.getName();
+            Usuario usuarioLogueado = usuarioRepository.findByUsuario(username)
+                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado en la sesión actual."));
+
+            Long idEmpresa = ((Number) invitacion.get("id_empresa")).longValue();
+            String rolAsignado = (String) invitacion.get("rol_asignado");
+
+            // 4. Vinculamos LA CUENTA QUE INICIÓ SESIÓN con la empresa
+            if (!usuarioEmpresaRepository.existeVinculo(usuarioLogueado.getIdUsuario(), idEmpresa)) {
+                usuarioEmpresaRepository.vincularUsuario(usuarioLogueado.getIdUsuario(), idEmpresa, rolAsignado);
+            }
+
+            // 5. Marcamos el token de invitación como ACEPTADA para que no se pueda usar dos veces
+            invitacionRepository.actualizarEstado(token, "ACEPTADA");
+
+            return ResponseEntity.ok("¡Bienvenido al equipo! Invitación vinculada a tu cuenta con éxito.");
+
+        } catch (Exception e) {
+            System.err.println("Error procesando la aceptación: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al aceptar la invitación.");
         }
     }
 

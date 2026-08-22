@@ -61,6 +61,8 @@ public class EmailService {
 
         } catch (Exception e) {
             System.err.println("Error al enviar el correo HTML: " + e.getMessage());
+            // 🔥 ESTA ES LA LÍNEA NUEVA: Le decimos al sistema que aborte la operación
+            throw new RuntimeException("No se pudo conectar al servidor de correos.");
         }
     }
 }
